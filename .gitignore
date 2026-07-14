@@ -1,0 +1,22 @@
+.env
+.coverage
+.pytest_cache/
+.ruff_cache/
+.uv-cache/
+.venv/
+__pycache__/
+*.py[cod]
+htmlcov/
+
+# Logs
+*.log
+
+# Database backups
+backups/
+*.dump
+*.backup
+
+# Redis persistence
+dump.rdb
+appendonly.aof
+appendonlydir/

@@ -1,0 +1,65 @@
+name: resumegraph
+
+services:
+  backend:
+    build:
+      context: .
+    init: true
+    environment:
+      RESUMEGRAPH_ENVIRONMENT: ${RESUMEGRAPH_ENVIRONMENT:-development}
+      RESUMEGRAPH_LOG_LEVEL: ${RESUMEGRAPH_LOG_LEVEL:-INFO}
+      RESUMEGRAPH_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-resumegraph}:${POSTGRES_PASSWORD:-resumegraph-local-only}@postgres:5432/${POSTGRES_DB:-resumegraph}
+      RESUMEGRAPH_REDIS_URL: redis://redis:6379/0
+      RESUMEGRAPH_READINESS_TIMEOUT_SECONDS: ${RESUMEGRAPH_READINESS_TIMEOUT_SECONDS:-1.0}
+      RESUMEGRAPH_DEPENDENCY_TIMEOUT_SECONDS: ${RESUMEGRAPH_DEPENDENCY_TIMEOUT_SECONDS:-3.0}
+      RESUMEGRAPH_ADMIN_SESSION_COOKIE_NAME: ${RESUMEGRAPH_ADMIN_SESSION_COOKIE_NAME:-resumegraph_admin_session}
+      RESUMEGRAPH_ADMIN_SESSION_TTL_SECONDS: ${RESUMEGRAPH_ADMIN_SESSION_TTL_SECONDS:-28800}
+      RESUMEGRAPH_COOKIE_SECURE: ${RESUMEGRAPH_COOKIE_SECURE:-false}
+      RESUMEGRAPH_ADMIN_LOGIN_MAX_FAILURES: ${RESUMEGRAPH_ADMIN_LOGIN_MAX_FAILURES:-5}
+      RESUMEGRAPH_ADMIN_LOGIN_WINDOW_SECONDS: ${RESUMEGRAPH_ADMIN_LOGIN_WINDOW_SECONDS:-300}
+      RESUMEGRAPH_ACCESS_TOKEN_PEPPER: ${RESUMEGRAPH_ACCESS_TOKEN_PEPPER:-local-development-access-token-pepper-change-me}
+      RESUMEGRAPH_RECRUITER_SESSION_COOKIE_NAME: ${RESUMEGRAPH_RECRUITER_SESSION_COOKIE_NAME:-resumegraph_recruiter_session}
+      RESUMEGRAPH_RECRUITER_SESSION_TTL_SECONDS: ${RESUMEGRAPH_RECRUITER_SESSION_TTL_SECONDS:-14400}
+      RESUMEGRAPH_ACCESS_EXCHANGE_FAILURE_LIMIT: ${RESUMEGRAPH_ACCESS_EXCHANGE_FAILURE_LIMIT:-10}
+      RESUMEGRAPH_ACCESS_EXCHANGE_FAILURE_WINDOW_SECONDS: ${RESUMEGRAPH_ACCESS_EXCHANGE_FAILURE_WINDOW_SECONDS:-600}
+      RESUMEGRAPH_MARKDOWN_MAX_BYTES: ${RESUMEGRAPH_MARKDOWN_MAX_BYTES:-1048576}
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-resumegraph}
+      POSTGRES_USER: ${POSTGRES_USER:-resumegraph}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-resumegraph-local-only}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes", "--loglevel", "warning"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres_data:
+  redis_data:
