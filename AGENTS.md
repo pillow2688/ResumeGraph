@@ -36,7 +36,9 @@ tested.
   [`docs/status/PHASE_2_1_STATUS.md`](docs/status/PHASE_2_1_STATUS.md).
 - **Phase 2.2 completed.** See
   [`docs/status/PHASE_2_2_STATUS.md`](docs/status/PHASE_2_2_STATUS.md).
-- **Active checkpoint: Phase 2.2 complete; waiting for explicit user confirmation before Phase 2.3.**
+- **Phase 2.3 — Document processing and chunking: completed.** See
+  [`docs/status/PHASE_2_3_STATUS.md`](docs/status/PHASE_2_3_STATUS.md).
+- **Active checkpoint: Phase 2.3 complete; waiting for explicit user confirmation before Phase 2.4.**
 
 See `docs/PHASE1_SUMMARY.md` for the verified Phase 1 implementation and validation details.
 
@@ -44,10 +46,10 @@ The high-level Phase 2 plan is documented in `docs/PHASE2_PLAN.md`.
 
 ## Active subsection constraints
 
-- Phase 2.2 knowledge documents and version management and its
-  `docs/status/PHASE_2_2_STATUS.md` checkpoint are complete.
-- Stop and wait for explicit user confirmation before beginning Phase 2.3.
-- Phase 2.3 through Phase 2.6 are context only and must not be implemented early.
+- Phase 2.3 asynchronous document processing and Chunk construction and its
+  `docs/status/PHASE_2_3_STATUS.md` checkpoint are complete.
+- Stop and wait for explicit user confirmation before beginning Phase 2.4.
+- Phase 2.4 through Phase 2.6 are context only and must not be implemented early.
 
 ## Implemented Phase 1 boundaries
 

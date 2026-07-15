@@ -3,6 +3,8 @@ import { Navigate, createBrowserRouter } from "react-router-dom";
 import { AccessGrants } from "../pages/AccessGrants";
 import { AdminLogin } from "../pages/AdminLogin";
 import { DocumentDetail } from "../pages/DocumentDetail";
+import { DocumentChunks } from "../pages/DocumentChunks";
+import { IngestionJob } from "../pages/IngestionJob";
 import { Portfolio } from "../pages/Portfolio";
 import { ProjectDocuments } from "../pages/ProjectDocuments";
 import { Projects } from "../pages/Projects";
@@ -28,6 +30,14 @@ export const router = createBrowserRouter([
   {
     path: "/admin/documents/:documentId",
     element: <DocumentDetail />,
+  },
+  {
+    path: "/admin/jobs/:jobId",
+    element: <IngestionJob />,
+  },
+  {
+    path: "/admin/document-versions/:versionId/chunks",
+    element: <DocumentChunks />,
   },
   {
     path: "/admin/access-grants",

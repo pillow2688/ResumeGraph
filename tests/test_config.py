@@ -27,6 +27,7 @@ def test_settings_load_prefixed_environment_variables(monkeypatch) -> None:
     monkeypatch.setenv("RESUMEGRAPH_ACCESS_EXCHANGE_FAILURE_LIMIT", "8")
     monkeypatch.setenv("RESUMEGRAPH_ACCESS_EXCHANGE_FAILURE_WINDOW_SECONDS", "420")
     monkeypatch.setenv("RESUMEGRAPH_MARKDOWN_MAX_BYTES", "2097152")
+    monkeypatch.setenv("RESUMEGRAPH_CHUNK_MAX_CHARACTERS", "2400")
 
     settings = Settings(_env_file=None)
 
@@ -45,6 +46,7 @@ def test_settings_load_prefixed_environment_variables(monkeypatch) -> None:
     assert settings.access_exchange_failure_limit == 8
     assert settings.access_exchange_failure_window_seconds == 420
     assert settings.markdown_max_bytes == 2 * 1024 * 1024
+    assert settings.chunk_max_characters == 2400
     assert database_url not in repr(settings)
     assert settings.access_token_pepper.get_secret_value() not in repr(settings)
 
@@ -82,6 +84,14 @@ def test_markdown_upload_limit_defaults_to_one_mibibyte() -> None:
 def test_markdown_upload_limit_must_be_positive() -> None:
     with pytest.raises(ValidationError):
         Settings(markdown_max_bytes=0, _env_file=None)
+
+
+def test_chunk_size_defaults_to_two_thousand_characters_and_must_be_positive() -> None:
+    settings = Settings(_env_file=None)
+
+    assert settings.chunk_max_characters == 2_000
+    with pytest.raises(ValidationError):
+        Settings(chunk_max_characters=0, _env_file=None)
 
 
 def test_admin_and_recruiter_cookie_names_must_differ() -> None:

@@ -1,7 +1,9 @@
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import (
+    JSON,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -16,12 +18,14 @@ from sqlalchemy.orm import configure_mappers
 from app import models
 
 
-def test_phase_2_2_metadata_contains_only_the_requested_tables() -> None:
+def test_phase_2_3_metadata_contains_only_the_requested_tables() -> None:
     assert set(models.Base.metadata.tables) == {
         "access_grants",
         "admin_users",
+        "document_chunks",
         "document_versions",
         "grant_projects",
+        "ingestion_jobs",
         "knowledge_documents",
         "projects",
     }
@@ -67,6 +71,34 @@ def test_phase_2_2_metadata_contains_only_the_requested_tables() -> None:
                 "raw_content",
                 "content_hash",
                 "status",
+                "created_at",
+            },
+        ),
+        (
+            "IngestionJob",
+            {
+                "id",
+                "document_version_id",
+                "status",
+                "stage",
+                "progress",
+                "error_message",
+                "created_at",
+                "started_at",
+                "finished_at",
+            },
+        ),
+        (
+            "DocumentChunk",
+            {
+                "id",
+                "document_version_id",
+                "chunk_index",
+                "heading_path",
+                "content",
+                "content_hash",
+                "character_count",
+                "enabled",
                 "created_at",
             },
         ),
@@ -254,7 +286,7 @@ def test_document_foreign_keys_constraints_and_relationships_prevent_cascade_del
     assert check_constraints == {
         "version_number > 0",
         "source_type IN ('pasted_markdown', 'markdown_file')",
-        "status = 'draft'",
+        "status IN ('draft', 'processing', 'ready_for_review')",
     }
 
     project = models.Project(name="Fictional knowledge project", description="")
@@ -278,7 +310,84 @@ def test_document_foreign_keys_constraints_and_relationships_prevent_cascade_del
     assert models.Project.documents.property.passive_deletes is True
 
 
-def test_document_models_do_not_prebuild_phase_2_3_columns() -> None:
+def test_phase_2_3_ingestion_models_have_exact_constraints_and_relationships() -> None:
+    configure_mappers()
+
+    versions = models.DocumentVersion.__table__
+    jobs = models.IngestionJob.__table__
+    chunks = models.DocumentChunk.__table__
+
+    version_checks = {
+        str(constraint.sqltext)
+        for constraint in versions.constraints
+        if isinstance(constraint, CheckConstraint)
+    }
+    assert "status IN ('draft', 'processing', 'ready_for_review')" in version_checks
+    assert "status = 'draft'" not in version_checks
+
+    job_checks = {
+        str(constraint.sqltext)
+        for constraint in jobs.constraints
+        if isinstance(constraint, CheckConstraint)
+    }
+    assert job_checks == {
+        "status IN ('pending', 'processing', 'completed', 'failed')",
+        "stage IN ('reading', 'cleaning', 'chunking', 'saving')",
+        "progress >= 0 AND progress <= 100",
+    }
+    assert isinstance(jobs.c.error_message.type, Text)
+    assert jobs.c.error_message.nullable is True
+    assert jobs.c.started_at.nullable is True
+    assert jobs.c.finished_at.nullable is True
+    assert any(
+        index.unique
+        and tuple(column.name for column in index.columns) == ("document_version_id",)
+        and index.dialect_options["postgresql"].get("where") is not None
+        for index in jobs.indexes
+    )
+
+    assert isinstance(chunks.c.heading_path.type, JSON)
+    assert isinstance(chunks.c.content.type, Text)
+    assert isinstance(chunks.c.enabled.type, Boolean)
+    assert chunks.c.enabled.server_default is not None
+    chunk_checks = {
+        str(constraint.sqltext)
+        for constraint in chunks.constraints
+        if isinstance(constraint, CheckConstraint)
+    }
+    assert chunk_checks == {"chunk_index >= 0", "character_count >= 0"}
+    chunk_uniques = {
+        tuple(column.name for column in constraint.columns)
+        for constraint in chunks.constraints
+        if isinstance(constraint, UniqueConstraint)
+    }
+    assert chunk_uniques == {("document_version_id", "chunk_index")}
+
+    version = models.DocumentVersion(
+        document_id=uuid4(),
+        version_number=1,
+        source_type="pasted_markdown",
+        original_filename=None,
+        raw_content="# Design",
+        content_hash="a" * 64,
+        status="processing",
+    )
+    job = models.IngestionJob(document_version=version)
+    chunk = models.DocumentChunk(
+        document_version=version,
+        chunk_index=0,
+        heading_path=["Design"],
+        content="Content",
+        content_hash="b" * 64,
+        character_count=7,
+    )
+    assert version.ingestion_jobs == [job]
+    assert version.chunks == [chunk]
+    assert job.document_version is version
+    assert chunk.document_version is version
+
+
+def test_document_models_do_not_prebuild_phase_2_4_or_later_columns() -> None:
     documents = models.KnowledgeDocument.__table__
     versions = models.DocumentVersion.__table__
 
@@ -289,6 +398,7 @@ def test_document_models_do_not_prebuild_phase_2_3_columns() -> None:
         "normalized_content",
         "processed_at",
         "embedding",
+        "reviewed_at",
     }
     assert prohibited_columns.isdisjoint(documents.columns.keys())
     assert prohibited_columns.isdisjoint(versions.columns.keys())

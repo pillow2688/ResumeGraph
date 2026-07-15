@@ -256,6 +256,33 @@ class KnowledgeDocumentUnavailableResponseError(AppError):
         )
 
 
+class IngestionJobNotFoundResponseError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=404,
+            code="ingestion_job_not_found",
+            message="Document processing job not found.",
+        )
+
+
+class DocumentVersionNotProcessableResponseError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=409,
+            code="document_version_not_processable",
+            message="The document version is not available for processing.",
+        )
+
+
+class IngestionUnavailableResponseError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=503,
+            code="service_unavailable",
+            message="Document processing is temporarily unavailable.",
+        )
+
+
 def _response(
     *,
     status_code: int,

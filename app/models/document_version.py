@@ -22,6 +22,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 
 if TYPE_CHECKING:
+    from app.models.document_chunk import DocumentChunk
+    from app.models.ingestion_job import IngestionJob
     from app.models.knowledge_document import KnowledgeDocument
 
 
@@ -37,8 +39,8 @@ class DocumentVersion(Base):
             name="ck_document_versions_source_type_valid",
         ),
         CheckConstraint(
-            "status = 'draft'",
-            name="ck_document_versions_status_draft",
+            "status IN ('draft', 'processing', 'ready_for_review')",
+            name="ck_document_versions_status_valid",
         ),
         UniqueConstraint(
             "document_id",
@@ -71,3 +73,11 @@ class DocumentVersion(Base):
     )
 
     document: Mapped[KnowledgeDocument] = relationship(back_populates="versions")
+    ingestion_jobs: Mapped[list[IngestionJob]] = relationship(
+        back_populates="document_version",
+        passive_deletes=True,
+    )
+    chunks: Mapped[list[DocumentChunk]] = relationship(
+        back_populates="document_version",
+        passive_deletes=True,
+    )

@@ -1,14 +1,14 @@
 # ResumeGraph
 
-This repository currently implements **Phase 2.2**: the Phase 0 foundation, Phase 1 access
-control, administrator Project CRUD, and administrator knowledge-document/version management.
-PostgreSQL remains the durable source of truth; Redis holds only fixed-expiry sessions and
-failed-authentication counters.
+This repository currently implements **Phase 2.3**: the Phase 0 foundation, Phase 1 access
+control, administrator Project and knowledge-document/version management, and asynchronous
+deterministic Markdown processing into review-ready Chunks. PostgreSQL remains the durable
+source of truth; Redis holds sessions, rate-limit counters, and the ephemeral ARQ queue.
 
-Phase 2.2 accepts pasted Markdown and UTF-8 `.md` uploads, persists immutable draft versions,
-and provides matching React administrator pages. It intentionally does not perform asynchronous
-ingestion, cleaning, chunking, publication, embedding, retrieval, RAG, LangGraph, Chat, or LLM
-calls.
+Phase 2.3 accepts saved Markdown versions, creates persistent ingestion Jobs, and uses an
+independent Worker to clean and split content. Successful processing enters
+`ready_for_review`; it does not publish content or implement Chunk editing/review, Embedding,
+pgvector retrieval, RAG, LangGraph, Chat, or LLM calls.
 
 ## Architecture
 
@@ -244,6 +244,41 @@ written to an arbitrary server path. The administrator UI is available at
 `/admin/projects/:projectId/documents` and `/admin/documents/:documentId`; Markdown is rendered as
 literal text in `<pre>`, without `dangerouslySetInnerHTML` or raw HTML execution.
 
+## Phase 2.3 asynchronous processing and chunking
+
+Migration `f3a9c2d8e4b1` adds persistent `ingestion_jobs` and `document_chunks`, and extends the
+version state machine to `draft -> processing -> ready_for_review`. Job status and current stage
+are separate: status is `pending`, `processing`, `completed`, or `failed`; stage is `reading`,
+`cleaning`, `chunking`, or `saving`. PostgreSQL stores all durable status and Chunk data. Redis
+only delivers an ARQ message containing the Job UUID.
+
+The API process creates or recovers a pending Job and returns `202`; it never cleans or chunks
+the document in the request path. Run the independent Worker with:
+
+```powershell
+uv run arq app.worker.WorkerSettings
+```
+
+The Worker removes an initial UTF-8 BOM and all NUL characters, normalizes newlines, trims line
+ends and the document boundary, compresses consecutive blank lines, rejects content that becomes
+empty, and computes a SHA-256 hash. Markdown-aware splitting follows ATX heading hierarchy and
+paragraph boundaries while keeping fenced code intact. `RESUMEGRAPH_CHUNK_MAX_CHARACTERS`
+(default `2000`) is a paragraph-aware secondary-split target; a single indivisible paragraph is
+preserved even when it exceeds that target.
+
+All Phase 2.3 APIs reuse `get_current_admin`:
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| `POST` | `/api/v1/admin/document-versions/{version_id}/process` | Create/recover a Job and return `202`. |
+| `GET` | `/api/v1/admin/jobs/{job_id}` | Read durable status, stage, progress, and safe failure text. |
+| `GET` | `/api/v1/admin/document-versions/{version_id}/chunks` | List stored Chunks by stable `chunk_index`. |
+
+The React administrator UI adds a **开始处理** action, a polling Job page at
+`/admin/jobs/:jobId`, and a read-only Chunk page at
+`/admin/document-versions/:versionId/chunks`. Chunk content is still rendered only as literal
+text. Processing success is preparation for a future review phase, never automatic publication.
+
 Recruiter settings:
 
 - `RESUMEGRAPH_ACCESS_TOKEN_PEPPER`: deployment secret used only for token HMAC; the
@@ -274,6 +309,12 @@ Start only the dependencies, then run the API on the host:
 ```powershell
 docker compose up -d postgres redis
 uv run uvicorn app.main:app --reload
+```
+
+Run the independent Worker in a second terminal:
+
+```powershell
+uv run arq app.worker.WorkerSettings
 ```
 
 Apply migrations and create the initial administrator. The CLI prompts twice without echoing
@@ -398,9 +439,12 @@ uv run alembic upgrade head
 
 ## Current limitation
 
-Phase 2.2 stores only original draft Markdown. It does not implement Job records, Worker or
-asynchronous processing, normalized content, Chunk creation or review, publication, Embedding,
-pgvector retrieval, RAG, LangGraph, Chat, SSE, PDF, Word, OCR, object storage, or LLM calls.
-`request_count` deduction, JWT, OAuth, refresh tokens, recruiter accounts, and email invitations
-also remain outside the current scope. Administrator and API deployment should remain
-same-origin; broad CORS is intentionally not configured.
+Phase 2.3 provides only deterministic processing and read-only Chunk inspection. It does not
+implement Chunk editing, approval/freeze, publication, Embedding, pgvector retrieval, RAG,
+LangGraph, Chat, SSE, PDF, Word, OCR, object storage, or LLM calls. A graceful Worker cancellation
+records `failed`, but a process hard-kill cannot run cleanup and may leave a stale `processing`
+record; this first queue slice deliberately has no lease sweeper or outbox framework. A pending
+Job stranded between PostgreSQL commit and Redis enqueue can be safely re-enqueued by repeating
+the process request. `request_count` deduction, JWT, OAuth, refresh tokens, recruiter accounts,
+and email invitations also remain outside the current scope. Administrator and API deployment
+should remain same-origin; broad CORS is intentionally not configured.

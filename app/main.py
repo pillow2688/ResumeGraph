@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from app.api.routes.admin_access_grants import router as admin_access_grants_router
 from app.api.routes.admin_auth import router as admin_auth_router
 from app.api.routes.admin_documents import router as admin_documents_router
+from app.api.routes.admin_ingestion import router as admin_ingestion_router
 from app.api.routes.admin_projects import router as admin_projects_router
 from app.api.routes.health import router as health_router
 from app.api.routes.recruiter_access import router as recruiter_access_router
@@ -18,14 +19,17 @@ from app.infrastructure.admin_session import AdminSessionStore
 from app.infrastructure.database import Database
 from app.infrastructure.failure_limiter import FailureRateLimiter
 from app.infrastructure.health import HealthDependency
+from app.infrastructure.job_queue import ArqJobQueue
 from app.infrastructure.recruiter_session import RecruiterSessionStore
 from app.infrastructure.redis import RedisConnection, RedisOperations
 from app.repositories.access_grant import AccessGrantRepository
 from app.repositories.admin_user import AdminUserRepository, DatabaseSessionProvider
+from app.repositories.ingestion import IngestionRepository
 from app.repositories.knowledge_document import KnowledgeDocumentRepository
 from app.repositories.project import ProjectRepository
 from app.services.access_grant import AccessGrantService
 from app.services.admin_auth import AdminAuthService
+from app.services.ingestion import IngestionService
 from app.services.knowledge_document import KnowledgeDocumentService
 from app.services.project import ProjectService
 
@@ -39,6 +43,7 @@ def create_app(
     access_grant_service: AccessGrantService | None = None,
     project_service: ProjectService | None = None,
     knowledge_document_service: KnowledgeDocumentService | None = None,
+    ingestion_service: IngestionService | None = None,
 ) -> FastAPI:
     """Build an application whose shared infrastructure is owned by its lifespan."""
     application_settings = settings or Settings()
@@ -103,10 +108,24 @@ def create_app(
                 markdown_max_bytes=application_settings.markdown_max_bytes,
                 dependency_timeout_seconds=application_settings.dependency_timeout_seconds,
             )
+        document_processing_service = ingestion_service
+        ingestion_queue: ArqJobQueue | None = None
+        if document_processing_service is None:
+            ingestion_queue = ArqJobQueue(
+                application_settings.redis_url.get_secret_value(),
+                timeout_seconds=application_settings.dependency_timeout_seconds,
+            )
+            document_processing_service = IngestionService(
+                IngestionRepository(cast(DatabaseSessionProvider, database_connection)),
+                ingestion_queue,
+                dependency_timeout_seconds=application_settings.dependency_timeout_seconds,
+            )
 
         async with AsyncExitStack() as stack:
             stack.push_async_callback(database_connection.close)
             stack.push_async_callback(redis_connection.close)
+            if ingestion_queue is not None:
+                stack.push_async_callback(ingestion_queue.close)
             application.state.settings = application_settings
             application.state.database = database_connection
             application.state.redis = redis_connection
@@ -114,6 +133,7 @@ def create_app(
             application.state.access_grant_service = recruiter_access_service
             application.state.project_service = project_management_service
             application.state.knowledge_document_service = document_management_service
+            application.state.ingestion_service = document_processing_service
             yield
 
     application = FastAPI(
@@ -126,6 +146,7 @@ def create_app(
     application.include_router(admin_auth_router)
     application.include_router(admin_access_grants_router)
     application.include_router(admin_documents_router)
+    application.include_router(admin_ingestion_router)
     application.include_router(admin_projects_router)
     application.include_router(recruiter_access_router)
     return application

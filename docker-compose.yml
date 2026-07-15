@@ -23,8 +23,27 @@ services:
       RESUMEGRAPH_ACCESS_EXCHANGE_FAILURE_LIMIT: ${RESUMEGRAPH_ACCESS_EXCHANGE_FAILURE_LIMIT:-10}
       RESUMEGRAPH_ACCESS_EXCHANGE_FAILURE_WINDOW_SECONDS: ${RESUMEGRAPH_ACCESS_EXCHANGE_FAILURE_WINDOW_SECONDS:-600}
       RESUMEGRAPH_MARKDOWN_MAX_BYTES: ${RESUMEGRAPH_MARKDOWN_MAX_BYTES:-1048576}
+      RESUMEGRAPH_CHUNK_MAX_CHARACTERS: ${RESUMEGRAPH_CHUNK_MAX_CHARACTERS:-2000}
     ports:
       - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+    init: true
+    command: ["arq", "app.worker.WorkerSettings"]
+    environment:
+      RESUMEGRAPH_ENVIRONMENT: ${RESUMEGRAPH_ENVIRONMENT:-development}
+      RESUMEGRAPH_LOG_LEVEL: ${RESUMEGRAPH_LOG_LEVEL:-INFO}
+      RESUMEGRAPH_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-resumegraph}:${POSTGRES_PASSWORD:-resumegraph-local-only}@postgres:5432/${POSTGRES_DB:-resumegraph}
+      RESUMEGRAPH_REDIS_URL: redis://redis:6379/0
+      RESUMEGRAPH_DEPENDENCY_TIMEOUT_SECONDS: ${RESUMEGRAPH_DEPENDENCY_TIMEOUT_SECONDS:-3.0}
+      RESUMEGRAPH_CHUNK_MAX_CHARACTERS: ${RESUMEGRAPH_CHUNK_MAX_CHARACTERS:-2000}
     depends_on:
       postgres:
         condition: service_healthy

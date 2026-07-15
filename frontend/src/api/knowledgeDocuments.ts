@@ -1,8 +1,11 @@
 import type {
   CreateDocumentRequest,
   CreateDocumentVersionRequest,
+  CreateIngestionJobResponse,
+  DocumentChunk,
   DocumentVersion,
   DocumentVersionSummary,
+  IngestionJob,
   KnowledgeDocument,
   KnowledgeDocumentSummary,
   UpdateDocumentTitleRequest,
@@ -89,4 +92,23 @@ export function uploadVersion(
 
 export function getDocumentVersion(versionId: string): Promise<DocumentVersion> {
   return apiRequest<DocumentVersion>(`${adminPath}/document-versions/${versionId}`);
+}
+
+export function processDocumentVersion(
+  versionId: string,
+): Promise<CreateIngestionJobResponse> {
+  return apiRequest<CreateIngestionJobResponse>(
+    `${adminPath}/document-versions/${versionId}/process`,
+    { method: "POST" },
+  );
+}
+
+export function getIngestionJob(jobId: string): Promise<IngestionJob> {
+  return apiRequest<IngestionJob>(`${adminPath}/jobs/${jobId}`);
+}
+
+export function listDocumentChunks(versionId: string): Promise<DocumentChunk[]> {
+  return apiRequest<DocumentChunk[]>(
+    `${adminPath}/document-versions/${versionId}/chunks`,
+  );
 }

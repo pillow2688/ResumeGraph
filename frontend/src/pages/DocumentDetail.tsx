@@ -7,6 +7,7 @@ import {
   getDocument,
   getDocumentVersion,
   listDocumentVersions,
+  processDocumentVersion,
   updateDocumentTitle,
   uploadVersion,
 } from "../api/knowledgeDocuments";
@@ -78,6 +79,7 @@ export function DocumentDetail() {
   const [isSavingTitle, setIsSavingTitle] = useState(false);
   const [isCreatingVersion, setIsCreatingVersion] = useState(false);
   const [isSavingVersion, setIsSavingVersion] = useState(false);
+  const [isStartingProcessing, setIsStartingProcessing] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -214,6 +216,30 @@ export function DocumentDetail() {
     }
   }
 
+  async function startProcessing(): Promise<void> {
+    if (!selectedVersion || selectedVersion.status !== "draft") {
+      return;
+    }
+    setIsStartingProcessing(true);
+    setActionError(null);
+    try {
+      const created = await processDocumentVersion(selectedVersion.id);
+      navigate(`/admin/jobs/${created.job_id}`);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        navigate("/admin/login", { replace: true });
+        return;
+      }
+      setActionError(
+        error instanceof ApiError && error.status === 409
+          ? "该文档版本当前不能开始处理，请刷新后重试。"
+          : "文档处理任务创建失败，请稍后重试。",
+      );
+    } finally {
+      setIsStartingProcessing(false);
+    }
+  }
+
   return (
     <Layout>
       {isLoading ? (
@@ -308,11 +334,33 @@ export function DocumentDetail() {
             </aside>
 
             <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
-              <div className="flex items-center justify-between gap-4">
+              <div className="flex flex-wrap items-center justify-between gap-4">
                 <h2 className="font-semibold">
                   {selectedVersion ? `原始 Markdown · v${selectedVersion.version_number}` : "原始 Markdown"}
                 </h2>
-                {isVersionLoading ? <span className="text-xs text-slate-500">正在加载…</span> : null}
+                <div className="flex items-center gap-3">
+                  {isVersionLoading ? (
+                    <span className="text-xs text-slate-500">正在加载…</span>
+                  ) : null}
+                  {selectedVersion?.status === "draft" ? (
+                    <button
+                      className="rounded-xl bg-cyan-700 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                      disabled={isStartingProcessing}
+                      onClick={() => void startProcessing()}
+                      type="button"
+                    >
+                      {isStartingProcessing ? "正在创建任务…" : "开始处理"}
+                    </button>
+                  ) : null}
+                  {selectedVersion?.status === "ready_for_review" ? (
+                    <Link
+                      className="rounded-xl bg-cyan-700 px-4 py-2.5 text-sm font-semibold text-white"
+                      to={`/admin/document-versions/${selectedVersion.id}/chunks`}
+                    >
+                      查看 Chunk
+                    </Link>
+                  ) : null}
+                </div>
               </div>
               {selectedVersion ? (
                 <pre

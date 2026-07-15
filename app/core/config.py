@@ -52,6 +52,7 @@ class Settings(BaseSettings):
         le=24 * 60 * 60,
     )
     markdown_max_bytes: int = Field(default=1024 * 1024, gt=0)
+    chunk_max_characters: int = Field(default=2_000, gt=0, le=100_000)
 
     @model_validator(mode="after")
     def validate_security_settings(self) -> Self:

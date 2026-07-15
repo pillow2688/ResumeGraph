@@ -9,7 +9,7 @@ DocumentTitle = Annotated[
     StringConstraints(strip_whitespace=True, min_length=1, max_length=200),
 ]
 DocumentSourceType = Literal["pasted_markdown", "markdown_file"]
-DocumentStatus = Literal["draft"]
+DocumentStatus = Literal["draft", "processing", "ready_for_review"]
 
 
 class KnowledgeDocumentCreateRequest(BaseModel):

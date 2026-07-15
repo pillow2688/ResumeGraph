@@ -9,6 +9,7 @@ import {
   getDocument,
   getDocumentVersion,
   listDocumentVersions,
+  processDocumentVersion,
   updateDocumentTitle,
   uploadVersion,
 } from "../api/knowledgeDocuments";
@@ -24,6 +25,7 @@ vi.mock("../api/knowledgeDocuments", () => ({
   getDocument: vi.fn(),
   getDocumentVersion: vi.fn(),
   listDocumentVersions: vi.fn(),
+  processDocumentVersion: vi.fn(),
   updateDocumentTitle: vi.fn(),
   uploadVersion: vi.fn(),
 }));
@@ -74,12 +76,14 @@ const getVersionMock = vi.mocked(getDocumentVersion);
 const updateTitleMock = vi.mocked(updateDocumentTitle);
 const createVersionMock = vi.mocked(createPastedVersion);
 const uploadVersionMock = vi.mocked(uploadVersion);
+const processVersionMock = vi.mocked(processDocumentVersion);
 
 function renderPage(): void {
   render(
     <MemoryRouter initialEntries={[`/admin/documents/${documentId}`]}>
       <Routes>
         <Route path="/admin/documents/:documentId" element={<DocumentDetail />} />
+        <Route path="/admin/jobs/:jobId" element={<div>文档处理任务</div>} />
         <Route path="/admin/login" element={<div>管理员登录</div>} />
       </Routes>
     </MemoryRouter>,
@@ -94,9 +98,25 @@ describe("DocumentDetail", () => {
     updateTitleMock.mockReset();
     createVersionMock.mockReset();
     uploadVersionMock.mockReset();
+    processVersionMock.mockReset();
     getDocumentMock.mockResolvedValue(knowledgeDocument);
     listVersionsMock.mockResolvedValue([versionOneSummary]);
     getVersionMock.mockResolvedValue(versionOne);
+  });
+
+  it("starts processing the selected draft and opens its job page", async () => {
+    const user = userEvent.setup();
+    processVersionMock.mockResolvedValue({
+      job_id: "0dc5214a-bf26-42e2-8a51-bf50e54de6fa",
+      status: "pending",
+    });
+    renderPage();
+    await screen.findByTestId("markdown-preview");
+
+    await user.click(screen.getByRole("button", { name: "开始处理" }));
+
+    expect(processVersionMock).toHaveBeenCalledWith(versionOne.id);
+    expect(await screen.findByText("文档处理任务")).toBeInTheDocument();
   });
 
   it("shows document context, version history, and a selectable raw preview", async () => {
