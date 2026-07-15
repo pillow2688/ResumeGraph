@@ -169,6 +169,28 @@ def test_provider_batches_requests_and_restores_response_index_order() -> None:
     ]
 
 
+def test_embed_query_reuses_the_single_text_batch_path() -> None:
+    client = FakeClient([response([[0.1, 0.2, 0.3]])])
+    provider = make_provider(client, max_retries=0)
+
+    vector = asyncio.run(provider.embed_query("Why PostgreSQL?"))
+
+    assert vector == [0.1, 0.2, 0.3]
+    assert client.embeddings.calls[0]["input"] == ["Why PostgreSQL?"]
+
+
+def test_fake_and_unconfigured_query_embedding_match_the_provider_contract() -> None:
+    fake = FakeEmbeddingProvider(dimensions=4)
+
+    assert (
+        asyncio.run(fake.embed_query("same question"))
+        == asyncio.run(fake.embed_texts(["same question"]))[0]
+    )
+
+    with pytest.raises(EmbeddingProviderNotConfiguredError):
+        asyncio.run(UnconfiguredEmbeddingProvider().embed_query("safe question"))
+
+
 @pytest.mark.parametrize(
     ("outcome", "expected_code"),
     [

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { ApiError } from "../api/client";
 import { getRecruiterSession, logoutRecruiter } from "../api/recruiterAccess";
@@ -113,6 +113,12 @@ export function Portfolio() {
                   <dd className="mt-2 text-lg font-semibold">{session.remaining_requests}</dd>
                 </div>
               </dl>
+              <Link
+                className="mt-6 inline-flex rounded-xl bg-cyan-300 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-cyan-200"
+                to="/interview"
+              >
+                进入 AI 面试
+              </Link>
             </section>
 
             <section className="mt-8">

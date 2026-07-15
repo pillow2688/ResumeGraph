@@ -10,6 +10,10 @@ import {
 import { getProject } from "../api/projects";
 import { Layout } from "../components/Layout";
 import { MarkdownInputDialog } from "../components/MarkdownInputDialog";
+import {
+  documentActionLabel,
+  documentStatusLabel,
+} from "../components/DocumentWorkflowStatus";
 import type { KnowledgeDocumentSummary } from "../types/knowledgeDocument";
 import type { Project } from "../types/project";
 
@@ -140,7 +144,7 @@ export function ProjectDocuments() {
             {project ? `${project.name} 知识文档` : "项目知识文档"}
           </h1>
           <p className="mt-3 text-sm leading-6 text-slate-600">
-            接收并保存 Markdown 草稿；处理、审核与发布不在当前阶段。
+            完整流程：保存 Markdown → 处理 → Chunk 审核 → 向量索引 → 发布。只有已发布版本会进入面试检索。
           </p>
         </div>
         <button
@@ -194,12 +198,25 @@ export function ProjectDocuments() {
                     </p>
                   </div>
                   <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800">
-                    {item.latest_version?.status ?? "暂无版本"}
+                    {documentStatusLabel(item.latest_version?.status)}
                   </span>
                 </div>
-                <p className="mt-5 border-t border-slate-100 pt-4 text-xs text-slate-500">
-                  更新于 {formatDate(item.updated_at)}
-                </p>
+                <div className="mt-5 flex items-center justify-between gap-3 border-t border-slate-100 pt-4">
+                  <div className="text-xs text-slate-500">
+                    <p>
+                      {item.current_published_version_id
+                        ? `线上版本 v${item.current_published_version_number ?? "?"}`
+                        : "当前没有线上版本"}
+                    </p>
+                    <p className="mt-1">更新于 {formatDate(item.updated_at)}</p>
+                  </div>
+                  <Link
+                    className="rounded-xl bg-slate-950 px-3 py-2 text-sm font-semibold text-white"
+                    to={`/admin/documents/${item.id}`}
+                  >
+                    {documentActionLabel(item.latest_version?.status)}
+                  </Link>
+                </div>
               </article>
             ))}
           </div>

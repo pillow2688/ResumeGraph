@@ -4,6 +4,7 @@
 .ruff_cache/
 .uv-cache/
 .venv/
+.idea/
 __pycache__/
 *.py[cod]
 htmlcov/

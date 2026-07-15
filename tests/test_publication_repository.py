@@ -117,6 +117,7 @@ def test_chunk_toggle_locks_row_and_requires_reindex(status: str) -> None:
     )
 
     assert record is not None and record.enabled is False
+    assert record.disabled_reason == "administrator"
     assert version.status == "ready_for_review"
     assert session.executed[0]._for_update_arg is not None
     assert session.commit_count == 1
@@ -133,6 +134,32 @@ def test_noop_chunk_toggle_does_not_invalidate_ready_version() -> None:
     assert record is not None and record.enabled is True
     assert version.status == "ready_to_publish"
     assert session.commit_count == 0
+
+
+def test_administrator_can_restore_an_ordinary_chunk_but_not_a_hard_block() -> None:
+    chunk, version = make_row(status="ready_for_review", enabled=False)
+    chunk.disabled_reason = "administrator"
+    session = FakeSession((chunk, version))
+
+    record = asyncio.run(
+        PublicationRepository(FakeDatabase(session)).set_chunk_enabled(chunk.id, enabled=True)
+    )
+
+    assert record is not None and record.enabled is True
+    assert record.disabled_reason is None
+
+    blocked, blocked_version = make_row(status="ready_for_review", enabled=False)
+    blocked.disabled_reason = "hard_block"
+    blocked_session = FakeSession((blocked, blocked_version))
+    with pytest.raises(ChunkNotEditableRepositoryError):
+        asyncio.run(
+            PublicationRepository(FakeDatabase(blocked_session)).set_chunk_enabled(
+                blocked.id,
+                enabled=True,
+            )
+        )
+    assert blocked.enabled is False
+    assert blocked.disabled_reason == "hard_block"
 
 
 @pytest.mark.parametrize("status", ["draft", "processing", "indexing", "published", "superseded"])

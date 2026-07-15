@@ -53,6 +53,15 @@ class DocumentChunkResponse(BaseModel):
     content_hash: str
     character_count: int
     enabled: bool
+    disabled_reason: (
+        Literal[
+            "hard_block",
+            "exact_duplicate",
+            "quality",
+            "administrator",
+        ]
+        | None
+    ) = None
     created_at: datetime
     auto_indexable: bool | None = None
     quality_issues: list[dict[str, object]] = Field(default_factory=list)

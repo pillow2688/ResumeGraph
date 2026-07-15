@@ -46,6 +46,10 @@ describe("Portfolio", () => {
     expect(screen.getByText("ResumeGraph")).toBeInTheDocument();
     expect(screen.getByText("42")).toBeInTheDocument();
     expect(screen.getByText("2026年7月21日")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "进入 AI 面试" })).toHaveAttribute(
+      "href",
+      "/interview",
+    );
   });
 
   it("redirects to the access page when the recruiter session is invalid", async () => {

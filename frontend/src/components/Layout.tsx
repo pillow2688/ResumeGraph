@@ -9,7 +9,9 @@ interface LayoutProps {
 
 const navigation = [
   { label: "项目", to: "/admin/projects" },
+  { label: "Profile 资料", to: "/admin/profile-documents" },
   { label: "访问授权", to: "/admin/access-grants" },
+  { label: "管理员", to: "/admin/users" },
 ];
 
 export function Layout({ children }: LayoutProps) {
@@ -90,4 +92,3 @@ export function Layout({ children }: LayoutProps) {
     </div>
   );
 }
-

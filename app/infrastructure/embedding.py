@@ -42,6 +42,8 @@ class EmbeddingProvider(Protocol):
 
     async def embed_texts(self, texts: list[str]) -> list[list[float]]: ...
 
+    async def embed_query(self, text: str) -> list[float]: ...
+
 
 class OpenAICompatibleEmbeddingProvider:
     """Shared-client adapter for any OpenAI-compatible Embedding endpoint."""
@@ -123,6 +125,9 @@ class OpenAICompatibleEmbeddingProvider:
         for offset in range(0, len(texts), self._batch_size):
             vectors.extend(await self._embed_batch(texts[offset : offset + self._batch_size]))
         return vectors
+
+    async def embed_query(self, text: str) -> list[float]:
+        return (await self.embed_texts([text]))[0]
 
     async def _embed_batch(self, texts: list[str]) -> list[list[float]]:
         for attempt in range(self._max_retries + 1):
@@ -249,14 +254,30 @@ class FakeEmbeddingProvider:
             )
         return vectors
 
+    async def embed_query(self, text: str) -> list[float]:
+        return (await self.embed_texts([text]))[0]
+
 
 class UnconfiguredEmbeddingProvider:
     """Production-safe placeholder that prevents external or fake vectorization."""
 
-    provider_name = "unconfigured"
-    model_name = "unconfigured"
-    dimensions = 0
+    def __init__(
+        self,
+        *,
+        provider_name: str = "unconfigured",
+        model_name: str = "unconfigured",
+        dimensions: int = 0,
+    ) -> None:
+        if not provider_name or not model_name or dimensions < 0:
+            raise ValueError("The unavailable Embedding identity is invalid.")
+        self.provider_name = provider_name
+        self.model_name = model_name
+        self.dimensions = dimensions
 
     async def embed_texts(self, texts: list[str]) -> list[list[float]]:
         del texts
+        raise EmbeddingProviderNotConfiguredError
+
+    async def embed_query(self, text: str) -> list[float]:
+        del text
         raise EmbeddingProviderNotConfiguredError

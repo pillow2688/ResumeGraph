@@ -25,6 +25,32 @@ export function listProjectDocuments(
   );
 }
 
+export function listProfileDocuments(): Promise<KnowledgeDocumentSummary[]> {
+  return apiRequest<KnowledgeDocumentSummary[]>(`${adminPath}/profile-documents`);
+}
+
+export function createPastedProfileDocument(
+  payload: CreateDocumentRequest,
+): Promise<KnowledgeDocument> {
+  return apiRequest<KnowledgeDocument, CreateDocumentRequest>(
+    `${adminPath}/profile-documents`,
+    { method: "POST", body: payload },
+  );
+}
+
+export function uploadProfileDocument(
+  title: string,
+  file: File,
+): Promise<KnowledgeDocument> {
+  const body = new FormData();
+  body.set("title", title);
+  body.set("file", file);
+  return apiFormRequest<KnowledgeDocument>(`${adminPath}/profile-documents/upload`, {
+    method: "POST",
+    body,
+  });
+}
+
 export function createPastedDocument(
   projectId: string,
   payload: CreateDocumentRequest,
@@ -150,4 +176,23 @@ export function unpublishDocument(documentId: string): Promise<PublicationState>
   return apiRequest<PublicationState>(`${adminPath}/documents/${documentId}/publication`, {
     method: "DELETE",
   });
+}
+
+export function deleteDocumentVersion(versionId: string): Promise<void> {
+  return apiRequest<void>(`${adminPath}/document-versions/${versionId}`, {
+    method: "DELETE",
+  });
+}
+
+export function permanentlyDeleteDocument(
+  documentId: string,
+  confirmationTitle: string,
+): Promise<void> {
+  return apiRequest<void, { confirmation_title: string }>(
+    `${adminPath}/documents/${documentId}`,
+    {
+      method: "DELETE",
+      body: { confirmation_title: confirmationTitle },
+    },
+  );
 }

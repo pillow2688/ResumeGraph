@@ -27,7 +27,7 @@ async def get_current_recruiter(
         raise RecruiterAuthenticationRequiredResponseError
     service = cast(AccessGrantService, request.app.state.access_grant_service)
     try:
-        return await service.get_current_recruiter(session_token)
+        return await service.get_current_recruiter_for_interview(session_token)
     except InvalidRecruiterSessionError as error:
         raise RecruiterAuthenticationRequiredResponseError from error
     except AccessControlUnavailableError as error:

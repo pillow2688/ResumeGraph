@@ -421,6 +421,24 @@ def test_current_recruiter_reloads_database_scope_and_ignores_redis_snapshot() -
     assert principal.allowed_projects[0].name == record.projects[0].name
 
 
+def test_interview_session_revalidation_keeps_an_exhausted_grant_authenticated() -> None:
+    record = make_record(request_count=100, max_requests=100)
+    repository = FakeRepository([record])
+    store = FakeSessionStore()
+    store.session = RecruiterSessionData(
+        grant_id=record.id,
+        created_at=NOW,
+        expires_at=NOW + timedelta(hours=1),
+        allowed_project_ids_snapshot=[record.projects[0].id],
+    )
+    service = make_service(repository, store=store)
+
+    principal = asyncio.run(service.get_current_recruiter_for_interview("opaque-session-token"))
+
+    assert principal.grant_id == record.id
+    assert principal.remaining_requests == 0
+
+
 @pytest.mark.parametrize("invalid_state", ["missing", "revoked", "expired", "exhausted", "empty"])
 def test_current_recruiter_rejects_invalid_current_database_grant(invalid_state: str) -> None:
     service_module = load_service_module()

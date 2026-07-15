@@ -62,6 +62,7 @@ def test_phase_2_4_metadata_contains_only_the_requested_tables() -> None:
             {
                 "id",
                 "project_id",
+                "document_scope",
                 "title",
                 "current_published_version_id",
                 "created_at",
@@ -108,6 +109,7 @@ def test_phase_2_4_metadata_contains_only_the_requested_tables() -> None:
                 "content_hash",
                 "character_count",
                 "enabled",
+                "disabled_reason",
                 "auto_indexable",
                 "quality_issues",
                 "extracted_metadata",
@@ -243,7 +245,11 @@ def test_knowledge_document_and_version_column_contracts() -> None:
 
     assert isinstance(documents.c.id.type, Uuid)
     assert isinstance(documents.c.project_id.type, Uuid)
-    assert documents.c.project_id.nullable is False
+    assert documents.c.project_id.nullable is True
+    assert isinstance(documents.c.document_scope.type, String)
+    assert documents.c.document_scope.type.length == 20
+    assert documents.c.document_scope.nullable is False
+    assert documents.c.document_scope.server_default is not None
     assert isinstance(documents.c.title.type, String)
     assert documents.c.title.type.length == 200
     assert documents.c.title.nullable is False
@@ -258,6 +264,21 @@ def test_knowledge_document_and_version_column_contracts() -> None:
         tuple(column.name for column in index.columns) == ("project_id",)
         for index in documents.indexes
     )
+    assert any(
+        tuple(column.name for column in index.columns)
+        == ("document_scope", "current_published_version_id")
+        for index in documents.indexes
+    )
+    document_checks = {
+        str(constraint.sqltext)
+        for constraint in documents.constraints
+        if isinstance(constraint, CheckConstraint)
+    }
+    assert document_checks == {
+        "document_scope IN ('profile', 'project')",
+        "((document_scope = 'project' AND project_id IS NOT NULL) OR "
+        "(document_scope = 'profile' AND project_id IS NULL))",
+    }
 
     assert isinstance(versions.c.id.type, Uuid)
     assert isinstance(versions.c.document_id.type, Uuid)
@@ -284,7 +305,9 @@ def test_knowledge_document_and_version_column_contracts() -> None:
     )
 
 
-def test_document_foreign_keys_constraints_and_relationships_prevent_cascade_deletion() -> None:
+def test_document_foreign_keys_constraints_and_relationships_support_document_cascade_only() -> (
+    None
+):
     configure_mappers()
 
     documents = models.KnowledgeDocument.__table__
@@ -295,7 +318,7 @@ def test_document_foreign_keys_constraints_and_relationships_prevent_cascade_del
     assert document_foreign_key.target_fullname == "projects.id"
     assert document_foreign_key.ondelete is None
     assert version_foreign_key.target_fullname == "knowledge_documents.id"
-    assert version_foreign_key.ondelete is None
+    assert version_foreign_key.ondelete == "CASCADE"
 
     unique_constraints = {
         tuple(column.name for column in constraint.columns)
@@ -321,7 +344,11 @@ def test_document_foreign_keys_constraints_and_relationships_prevent_cascade_del
     }
 
     project = models.Project(name="Fictional knowledge project", description="")
-    document = models.KnowledgeDocument(project=project, title="Design notes")
+    document = models.KnowledgeDocument(
+        project=project,
+        document_scope="project",
+        title="Design notes",
+    )
     version = models.DocumentVersion(
         document=document,
         version_number=1,
@@ -339,6 +366,15 @@ def test_document_foreign_keys_constraints_and_relationships_prevent_cascade_del
     assert "delete" not in models.Project.documents.property.cascade
     assert "delete-orphan" not in models.Project.documents.property.cascade
     assert models.Project.documents.property.passive_deletes is True
+    assert models.KnowledgeDocument.versions.property.passive_deletes is True
+
+    profile_document = models.KnowledgeDocument(
+        project_id=None,
+        document_scope="profile",
+        title="AI Agent resume",
+    )
+    assert profile_document.project_id is None
+    assert profile_document.document_scope == "profile"
 
 
 def test_phase_2_4_indexing_models_have_exact_constraints_and_relationships() -> None:
@@ -385,12 +421,27 @@ def test_phase_2_4_indexing_models_have_exact_constraints_and_relationships() ->
     assert isinstance(chunks.c.content.type, Text)
     assert isinstance(chunks.c.enabled.type, Boolean)
     assert chunks.c.enabled.server_default is not None
+    assert isinstance(chunks.c.disabled_reason.type, String)
+    assert chunks.c.disabled_reason.type.length == 32
+    assert chunks.c.disabled_reason.nullable is True
     chunk_checks = {
         str(constraint.sqltext)
         for constraint in chunks.constraints
         if isinstance(constraint, CheckConstraint)
     }
-    assert chunk_checks == {"chunk_index >= 0", "character_count >= 0"}
+    assert chunk_checks == {
+        "chunk_index >= 0",
+        "character_count >= 0",
+        "disabled_reason IS NULL OR disabled_reason IN "
+        "('hard_block', 'exact_duplicate', 'quality', 'administrator')",
+        "((enabled IS TRUE AND disabled_reason IS NULL) OR "
+        "(enabled IS FALSE AND disabled_reason IS NOT NULL))",
+    }
+    assert any(
+        tuple(column.name for column in index.columns)
+        == ("content_hash", "enabled", "disabled_reason")
+        for index in chunks.indexes
+    )
     chunk_uniques = {
         tuple(column.name for column in constraint.columns)
         for constraint in chunks.constraints

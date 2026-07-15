@@ -1,22 +1,52 @@
 # ResumeGraph
 
-This repository has completed **Phase 2 knowledge-base construction**. Phase 2.1–2.4 now provide
-Project management, versioned Markdown knowledge documents, asynchronous cleaning and Chunking,
-deterministic quality rules, a strict DeepSeek judgment boundary, one unified
-`knowledge_indexing` Job, a generic OpenAI-compatible Embedding Provider, pgvector storage,
-administrator Chunk correction, and atomic publish/unpublish operations. PostgreSQL remains the
-durable source of truth; Redis holds sessions, rate-limit counters, and the ephemeral ARQ queue.
+This repository has completed the **Phase 3 single-turn RAG interview MVP** on top
+of the completed Phase 2 knowledge pipeline. An authorized Recruiter can open `/interview`, select
+Grant-authorized Projects, ask one question, and receive a first-person Evidence-grounded answer
+with validated citations or an explicit insufficient-evidence refusal. PostgreSQL remains the
+durable authorization and knowledge source; pgvector performs retrieval, while Redis holds only
+ephemeral sessions, rate-limit counters, and the ARQ queue.
 
 The approved Embedding configuration is 智谱 `embedding-3`, 1024 dimensions, batch size 10,
 30-second timeout, and two retries. The API key is intentionally absent from Git and must be
-provided through `EMBEDDING_API_KEY`. On 2026-07-15, an opt-in live check using fictional content
-verified DeepSeek V4 Pro judgment, 智谱 `embedding-3` vectorization, PostgreSQL/pgvector storage,
-and the unified publish/unpublish path. Test records were removed after verification. Retrieval,
-RAG, Retriever, LangGraph, Chat, and public-agent behavior remain out of scope.
+provided through `EMBEDDING_API_KEY`. On 2026-07-16, real 智谱/DeepSeek calls, the local
+PostgreSQL/pgvector integration, Docker Desktop, and the five-service Compose stack passed external
+acceptance. A real browser run through the containerized Frontend and Backend verified Profile and
+Project publication, all three questions, scoped Citations, quota, immediate revocation, and
+administrator list/create/safe-delete behavior.
 
-See the [final Phase 2 route](docs/PHASE2_PLAN.md), [Phase 2 summary](docs/PHASE2_SUMMARY.md), and
-[Phase 2.4 checkpoint](docs/status/PHASE_2_4_STATUS.md). The next phase has not started and requires
-new explicit user confirmation.
+See the [Phase 3 plan](docs/PHASE3_PLAN.md), [Phase 3 summary](docs/PHASE3_SUMMARY.md), and
+[Phase 3 status](docs/status/PHASE_3_STATUS.md). Advanced retrieval, LangGraph, multi-agent behavior,
+and multi-turn conversation require separate future approval.
+
+## Phase 3 RAG MVP
+
+Candidate background is stored as published Profile documents. Every valid Recruiter Grant can
+retrieve published Profile evidence, while Project evidence is still restricted by the Grant and
+the request's selected-project intersection. Profile and Project evidence rank together in one
+pgvector Top-K query and expose their scope explicitly in Citations.
+
+```text
+Recruiter Session revalidation
+→ requested Projects ∩ currently allowed Projects
+→ atomic request_count UPDATE ... RETURNING
+→ shared EmbeddingProvider.embed_query
+→ authorized current-published pgvector Top-K
+→ server-owned Evidence handles
+→ strict JSON first-person answer or fixed refusal
+→ citation revalidation and minimal public response
+```
+
+The public route is `POST /api/v1/interview/ask`. Invalid parameters, invalid Sessions, and empty
+project intersections do not consume quota. Once a valid request reserves quota, insufficient
+evidence and temporary Provider failures are not refunded. The React page keeps visible turns only
+in component memory and never sends history with the next request.
+
+Administrator management uses `GET/POST /api/v1/admin/users` and
+`DELETE /api/v1/admin/users/{admin_user_id}`. The UI at `/admin/users` prevents self-deletion, while
+the backend also prevents deleting the final administrator. Project and Profile knowledge pages
+show the required upload → process → Chunk review → index → publish workflow; uploading alone does
+not make a document retrievable.
 
 ## Architecture
 
@@ -173,9 +203,10 @@ than silently bypassing the limiter. Client-supplied `X-Forwarded-For` is not tr
 production deployment behind a trusted reverse proxy must establish one reviewed proxy-IP
 policy before using forwarded client addresses.
 
-The exchange and `/access/me` paths only check `request_count < max_requests`; Phase 1.3
-does not increment `request_count`. A future Chat request must consume quota with one atomic
-database `UPDATE`, never a `SELECT` followed by a Python-side increment.
+The token exchange rejects an already exhausted Grant. `/access/me` and `/interview` can still
+represent a current zero-quota Session so the UI can show the exhausted state. Each valid Interview
+request consumes quota with one conditional database `UPDATE ... RETURNING`, never a `SELECT`
+followed by a Python-side increment.
 
 To inspect and revoke grants with the administrator cookie:
 
@@ -462,6 +493,23 @@ uv run alembic upgrade head
 
 ## Current Phase 2 limitations
 
+The final Phase 2 lifecycle patch adds `document_scope=profile|project`, Profile document creation
+and listing, exact-hash deduplication in current-published Profile or single-Project scopes,
+separate unpublish/permanent-delete behavior, safe Version deletion, database cascades, and
+canonical/Embedding reselection. Administrator endpoints added by this closure are:
+
+| Method | Path | Responsibility |
+| --- | --- | --- |
+| `POST` | `/api/v1/admin/profile-documents` | Create a Profile-global document from pasted Markdown. |
+| `POST` | `/api/v1/admin/profile-documents/upload` | Create a Profile-global document from an uploaded `.md`. |
+| `GET` | `/api/v1/admin/profile-documents` | List Profile documents and current publication/Chunk/Embedding counts. |
+| `DELETE` | `/api/v1/admin/document-versions/{version_id}` | Permanently delete an allowed non-current Version and its dependent data. |
+| `DELETE` | `/api/v1/admin/documents/{document_id}` | Permanently delete a document after an exact-title JSON confirmation and remove all dependent data. |
+
+The React administrator route `/admin/profile-documents` exposes multiple Profile documents,
+statistics, shared Version/processing/indexing/publication workflows, offline confirmation, and
+typed permanent deletion. It is not a Recruiter interview or retrieval page.
+
 Phase 2.4 uses a single `OpenAICompatibleEmbeddingProvider`; it does not contain vendor-specific
 Provider classes or a multi-vendor factory. If `EMBEDDING_API_KEY` is empty, production startup
 uses an explicit `UnconfiguredEmbeddingProvider` and indexing fails safely—never by silently
@@ -478,10 +526,11 @@ The non-billable real PostgreSQL/pgvector publication boundary can be run with
 The live boundary was executed successfully on 2026-07-15 with secrets loaded from the ignored
 local `.env`; no API key is stored in this repository.
 
-There is no pgvector retrieval, Retriever, RAG, LangGraph, Chat, SSE, PDF, Word, OCR, object
-storage, or public question-answering agent in Phase 2. A graceful Worker cancellation records
-`failed`, but a process
-hard-kill cannot run cleanup and may leave a stale `processing` record; there is no lease
-sweeper or outbox framework. `request_count` deduction, JWT, OAuth, refresh tokens, recruiter
-accounts, and email invitations also remain outside the current scope. Administrator and API
-deployment should remain same-origin; broad CORS is intentionally not configured.
+Phase 3 now adds globally published Profile plus Grant-authorized Project pgvector retrieval and a
+bounded single-turn Chat path. There is still no LangGraph, multi-agent runtime, multi-turn context,
+SSE, Query Rewrite, Hybrid Search, Reranker, PDF, Word, OCR, or object storage. A graceful Worker
+cancellation records `failed`, but a process hard-kill cannot run cleanup and may leave a stale
+`processing` record; there is no lease sweeper or outbox framework. JWT, OAuth, refresh tokens,
+recruiter accounts, and email invitations also remain outside the current scope. Administrator,
+Recruiter UI, and API deployment should remain same-origin; broad CORS is intentionally not
+configured.

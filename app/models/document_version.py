@@ -57,7 +57,14 @@ class DocumentVersion(Base):
     )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
-    document_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("knowledge_documents.id"))
+    document_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey(
+            "knowledge_documents.id",
+            name="fk_document_versions_document_id_knowledge_documents",
+            ondelete="CASCADE",
+        ),
+    )
     version_number: Mapped[int] = mapped_column(Integer)
     source_type: Mapped[str] = mapped_column(String(32))
     original_filename: Mapped[str | None] = mapped_column(String(255))

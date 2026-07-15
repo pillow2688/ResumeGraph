@@ -245,6 +245,45 @@ def test_create_document_returns_none_for_missing_project_without_write() -> Non
     assert session.commit_count == 0
 
 
+def test_create_profile_document_does_not_query_or_create_a_virtual_project() -> None:
+    session = FakeSession()
+    repository = KnowledgeDocumentRepository(FakeDatabase(session))
+
+    record = asyncio.run(
+        repository.create_profile_document(
+            title="AI Agent resume",
+            source_type="pasted_markdown",
+            original_filename=None,
+            raw_content="# Fictional candidate",
+            content_hash="b" * 64,
+        )
+    )
+
+    assert record is not None
+    assert record.document_scope == "profile"
+    assert record.project_id is None
+    assert record.project_name is None
+    assert session.executed == []
+    document = next(item for item in session.added if isinstance(item, KnowledgeDocument))
+    assert document.document_scope == "profile"
+    assert document.project_id is None
+    assert session.commit_count == 1
+
+
+def test_profile_document_list_uses_scope_without_project_lookup() -> None:
+    session = FakeSession(results=[[]])
+    repository = KnowledgeDocumentRepository(FakeDatabase(session))
+
+    records = asyncio.run(repository.list_profile_documents())
+
+    assert records == []
+    assert len(session.executed) == 1
+    sql = str(session.executed[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "document_scope" in sql
+    assert "profile" in sql
+    assert "current_chunk_count" in sql
+
+
 def test_new_version_locks_document_and_computes_next_number_in_same_transaction() -> None:
     project = make_project()
     document = make_document(project)

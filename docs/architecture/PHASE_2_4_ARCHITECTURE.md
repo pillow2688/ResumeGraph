@@ -189,3 +189,52 @@ sequenceDiagram
 ```
 
 Phase 2.4 只建立发布关系和完整性，不提供任何面试官检索入口。
+
+## 6. Phase 2 生命周期收尾架构
+
+### Profile / Project 范围与精确去重
+
+```mermaid
+flowchart LR
+    P["当前发布 Profile Documents"] --> PG["Profile 全局去重范围"]
+    A["Project A 当前发布 Documents"] --> AG["Project A 独立去重范围"]
+    B["Project B 当前发布 Documents"] --> BG["Project B 独立去重范围"]
+    PG --> H["按 content_hash 分组"]
+    AG --> H2["按 content_hash 分组"]
+    BG --> H3["按 content_hash 分组"]
+    H --> C["最早 created_at + Chunk ID 选 canonical"]
+    C --> E["canonical enabled + 一份活动 Embedding"]
+    C --> D["其余 exact_duplicate + disabled + 无活动 Embedding"]
+```
+
+不同 Project 的箭头永不汇合。Hard Block、Quality 或 Administrator 禁用的 Chunk 不进入自动
+恢复候选集。
+
+### 发布、下线和删除后的重建
+
+```mermaid
+sequenceDiagram
+    actor Admin as 管理员
+    participant API as Admin API
+    participant S as Publication/Lifecycle Service
+    participant PG as PostgreSQL
+    participant D as Deduplication Service
+    participant EP as Embedding Provider
+
+    Admin->>API: publish / unpublish / delete
+    API->>S: 已认证的受控操作
+    S->>PG: 锁定并提交发布指针或级联删除
+    PG-->>S: document_scope + project_id
+    S->>D: rebuild Profile 或指定 Project
+    D->>PG: 读取当前发布快照与活动 Embedding 身份
+    D->>D: 稳定选择 canonical
+    alt 新 canonical 没有可复用向量
+        D->>EP: 对规则检查/脱敏后的正文生成向量
+        EP-->>D: 当前 provider/model/dimensions 向量
+    end
+    D->>PG: 原子更新 enabled/reason/issues 并清理或 upsert Embedding
+```
+
+Version 删除只允许安全的非当前状态；Document 永久删除要求精确标题确认且没有活动 Job。
+PostgreSQL 外键负责 `Document → Version → Chunk → Embedding/Job` 的级联。取消发布不触发级联，
+只把当前发布指针清空并把原当前 Version 设为 `superseded`。

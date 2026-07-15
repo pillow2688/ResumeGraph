@@ -136,6 +136,15 @@ def _is_currently_valid(record: AccessGrantRecord | None, now: datetime) -> bool
     )
 
 
+def _is_currently_authorized(record: AccessGrantRecord | None, now: datetime) -> bool:
+    return bool(
+        record is not None
+        and record.revoked_at is None
+        and record.expires_at > now
+        and record.projects
+    )
+
+
 def _to_principal(record: AccessGrantRecord) -> RecruiterPrincipal:
     projects = [ProjectSummary(id=project.id, name=project.name) for project in record.projects]
     return RecruiterPrincipal(
@@ -317,6 +326,27 @@ class AccessGrantService:
         )
 
     async def get_current_recruiter(self, session_token: str) -> RecruiterPrincipal:
+        return await self._get_current_recruiter(
+            session_token,
+            require_remaining_requests=True,
+        )
+
+    async def get_current_recruiter_for_interview(
+        self,
+        session_token: str,
+    ) -> RecruiterPrincipal:
+        """Keep an exhausted but otherwise active Session authenticated for a 429 response."""
+        return await self._get_current_recruiter(
+            session_token,
+            require_remaining_requests=False,
+        )
+
+    async def _get_current_recruiter(
+        self,
+        session_token: str,
+        *,
+        require_remaining_requests: bool,
+    ) -> RecruiterPrincipal:
         try:
             session = await _await_dependency(
                 self._session_store.read(session_token),
@@ -328,7 +358,13 @@ class AccessGrantService:
             raise InvalidRecruiterSessionError
 
         record = await self._load_grant(session.grant_id)
-        if not _is_currently_valid(record, self._clock()):
+        now = self._clock()
+        is_valid = (
+            _is_currently_valid(record, now)
+            if require_remaining_requests
+            else _is_currently_authorized(record, now)
+        )
+        if not is_valid:
             raise InvalidRecruiterSessionError
         assert record is not None
         return _to_principal(record)

@@ -76,6 +76,38 @@ class AdminAuthUnavailableResponseError(AppError):
         )
 
 
+class AdminUsernameExistsResponseError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=409,
+            code="admin_username_exists",
+            message="Administrator username already exists.",
+        )
+
+
+class ManagedAdminNotFoundResponseError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=404,
+            code="admin_not_found",
+            message="Administrator not found.",
+        )
+
+
+class AdminDeletionForbiddenResponseError(AppError):
+    def __init__(self, *, code: str, message: str) -> None:
+        super().__init__(status_code=409, code=code, message=message)
+
+
+class AdminUserManagementUnavailableResponseError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=503,
+            code="service_unavailable",
+            message="Administrator management is temporarily unavailable.",
+        )
+
+
 class InvalidAccessGrantResponseError(AppError):
     def __init__(self) -> None:
         super().__init__(
@@ -109,6 +141,33 @@ class AccessControlUnavailableResponseError(AppError):
             status_code=503,
             code="service_unavailable",
             message="Recruiter access control is temporarily unavailable.",
+        )
+
+
+class InterviewProjectScopeResponseError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=403,
+            code="project_scope_forbidden",
+            message="The requested project scope is not authorized.",
+        )
+
+
+class InterviewQuotaExhaustedResponseError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=429,
+            code="request_quota_exhausted",
+            message="The access grant request quota is exhausted.",
+        )
+
+
+class InterviewUnavailableResponseError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=503,
+            code="interview_unavailable",
+            message="Interview answering is temporarily unavailable.",
         )
 
 
@@ -253,6 +312,33 @@ class KnowledgeDocumentUnavailableResponseError(AppError):
             status_code=503,
             code="service_unavailable",
             message="Knowledge document management is temporarily unavailable.",
+        )
+
+
+class DocumentVersionNotDeletableResponseError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=409,
+            code="document_version_not_deletable",
+            message="The document version cannot be permanently deleted in its current state.",
+        )
+
+
+class ActiveDocumentJobResponseError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=409,
+            code="active_document_job",
+            message="The document has an active processing job.",
+        )
+
+
+class DocumentConfirmationMismatchResponseError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=409,
+            code="document_confirmation_mismatch",
+            message="The permanent deletion confirmation does not match.",
         )
 
 

@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.models import AccessGrant, GrantProject, Project
@@ -33,6 +34,9 @@ class FakeResult:
         return FakeScalars(self._values)
 
     def scalar_one_or_none(self):
+        return self._values[0] if self._values else None
+
+    def one_or_none(self):
         return self._values[0] if self._values else None
 
 
@@ -160,6 +164,39 @@ def test_repository_loads_safe_records_and_revokes_idempotently() -> None:
     assert second_revoke.revoked_at == revoked_at
     assert session.executed_statements[-2]._for_update_arg is not None
     assert session.executed_statements[-1]._for_update_arg is not None
+
+
+def test_consume_request_uses_one_conditional_update_returning_statement() -> None:
+    repository_module = load_repository_module()
+    session = FakeSession(results=[[(4, 10)]])
+    repository = repository_module.AccessGrantRepository(FakeDatabase(session))
+    grant_id = uuid4()
+
+    quota = asyncio.run(repository.consume_request(grant_id))
+
+    assert quota.request_count == 4
+    assert quota.max_requests == 10
+    assert quota.remaining_requests == 6
+    assert session.commit_count == 1
+    assert len(session.executed_statements) == 1
+    compiled = session.executed_statements[0].compile(dialect=postgresql.dialect())
+    sql = " ".join(str(compiled).lower().split())
+    assert sql.startswith("update access_grants set request_count=")
+    assert "access_grants.request_count +" in sql
+    assert "access_grants.request_count < access_grants.max_requests" in sql
+    assert "access_grants.revoked_at is null" in sql
+    assert "access_grants.expires_at > now()" in sql
+    assert "returning access_grants.request_count, access_grants.max_requests" in sql
+    assert compiled.params["id_1"] == grant_id
+
+
+def test_consume_request_returns_none_when_the_atomic_guard_rejects_the_grant() -> None:
+    repository_module = load_repository_module()
+    session = FakeSession(results=[[]])
+    repository = repository_module.AccessGrantRepository(FakeDatabase(session))
+
+    assert asyncio.run(repository.consume_request(uuid4())) is None
+    assert session.commit_count == 1
 
 
 @pytest.mark.parametrize(

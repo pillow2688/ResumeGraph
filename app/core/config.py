@@ -149,6 +149,10 @@ class Settings(BaseSettings):
             "RESUMEGRAPH_EMBEDDING_MAX_RETRIES",
         ),
     )
+    rag_top_k: int = Field(default=6, gt=0, le=50)
+    rag_max_context_characters: int = Field(default=12_000, gt=0, le=100_000)
+    rag_answer_timeout_seconds: float = Field(default=45, gt=0, le=120)
+    rag_answer_output_retries: int = Field(default=1, ge=0, le=1)
 
     @model_validator(mode="after")
     def validate_security_settings(self) -> Self:

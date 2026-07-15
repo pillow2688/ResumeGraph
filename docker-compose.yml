@@ -24,8 +24,16 @@ services:
       RESUMEGRAPH_ACCESS_EXCHANGE_FAILURE_WINDOW_SECONDS: ${RESUMEGRAPH_ACCESS_EXCHANGE_FAILURE_WINDOW_SECONDS:-600}
       RESUMEGRAPH_MARKDOWN_MAX_BYTES: ${RESUMEGRAPH_MARKDOWN_MAX_BYTES:-1048576}
       RESUMEGRAPH_CHUNK_MAX_CHARACTERS: ${RESUMEGRAPH_CHUNK_MAX_CHARACTERS:-2000}
+      RESUMEGRAPH_DEEPSEEK_API_KEY: ${RESUMEGRAPH_DEEPSEEK_API_KEY:-}
+      RESUMEGRAPH_DEEPSEEK_BASE_URL: ${RESUMEGRAPH_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      RESUMEGRAPH_DEEPSEEK_QUALITY_MODEL: ${RESUMEGRAPH_DEEPSEEK_QUALITY_MODEL:-deepseek-v4-pro}
+      RESUMEGRAPH_RAG_TOP_K: ${RESUMEGRAPH_RAG_TOP_K:-6}
+      RESUMEGRAPH_RAG_MAX_CONTEXT_CHARACTERS: ${RESUMEGRAPH_RAG_MAX_CONTEXT_CHARACTERS:-12000}
+      RESUMEGRAPH_RAG_ANSWER_TIMEOUT_SECONDS: ${RESUMEGRAPH_RAG_ANSWER_TIMEOUT_SECONDS:-45}
+      RESUMEGRAPH_RAG_ANSWER_OUTPUT_RETRIES: ${RESUMEGRAPH_RAG_ANSWER_OUTPUT_RETRIES:-1}
       EMBEDDING_PROVIDER_NAME: ${EMBEDDING_PROVIDER_NAME:-zhipu}
       EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-https://open.bigmodel.cn/api/paas/v4}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-embedding-3}
       EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-1024}
       EMBEDDING_SEND_DIMENSIONS: ${EMBEDDING_SEND_DIMENSIONS:-true}
@@ -38,6 +46,26 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/live', timeout=2)
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-5173}:80"
+    depends_on:
+      backend:
         condition: service_healthy
 
   worker:

@@ -40,6 +40,8 @@ class PublicationRepositoryUnavailableError(Exception):
 class PublicationStateRecord:
     document_id: UUID
     current_published_version_id: UUID | None
+    document_scope: str = "project"
+    project_id: UUID | None = None
 
 
 def _chunk_record(chunk: DocumentChunk) -> DocumentChunkRecord:
@@ -53,6 +55,7 @@ def _chunk_record(chunk: DocumentChunk) -> DocumentChunkRecord:
         character_count=chunk.character_count,
         enabled=chunk.enabled,
         created_at=chunk.created_at,
+        disabled_reason=chunk.disabled_reason,
         auto_indexable=chunk.auto_indexable,
         quality_issues=tuple(chunk.quality_issues or []),
         extracted_metadata=chunk.extracted_metadata,
@@ -89,10 +92,13 @@ class PublicationRepository:
                 chunk, version = row
                 if version.status not in EDITABLE_VERSION_STATUSES:
                     raise ChunkNotEditableRepositoryError
+                if enabled and chunk.disabled_reason == "hard_block":
+                    raise ChunkNotEditableRepositoryError
                 if chunk.enabled == enabled:
                     return _chunk_record(chunk)
 
                 chunk.enabled = enabled
+                chunk.disabled_reason = None if enabled else "administrator"
                 version.status = "ready_for_review"
                 await session.commit()
                 return _chunk_record(chunk)
@@ -189,6 +195,8 @@ class PublicationRepository:
                 return PublicationStateRecord(
                     document_id=document.id,
                     current_published_version_id=version.id,
+                    document_scope=document.document_scope,
+                    project_id=document.project_id,
                 )
         except (
             VersionNotPublishableRepositoryError,
@@ -217,6 +225,8 @@ class PublicationRepository:
                     return PublicationStateRecord(
                         document_id=document.id,
                         current_published_version_id=None,
+                        document_scope=document.document_scope,
+                        project_id=document.project_id,
                     )
 
                 version_result = await session.execute(
@@ -233,6 +243,8 @@ class PublicationRepository:
                 return PublicationStateRecord(
                     document_id=document.id,
                     current_published_version_id=None,
+                    document_scope=document.document_scope,
+                    project_id=document.project_id,
                 )
         except (SQLAlchemyError, OSError) as error:
             raise PublicationRepositoryUnavailableError from error

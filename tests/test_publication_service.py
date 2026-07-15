@@ -75,6 +75,18 @@ class FakeRepository:
         return self.publication_result
 
 
+class FakeDeduplicationService:
+    def __init__(self) -> None:
+        self.profile_calls = 0
+        self.project_calls: list[object] = []
+
+    async def rebuild_profile_scope(self):
+        self.profile_calls += 1
+
+    async def rebuild_project_scope(self, project_id):
+        self.project_calls.append(project_id)
+
+
 def test_chunk_correction_is_provider_independent_and_returns_chunk_summary() -> None:
     chunk = make_chunk(enabled=False)
     repository = FakeRepository(chunk)
@@ -147,6 +159,41 @@ def test_publish_uses_active_generic_embedding_identity_and_unpublish_is_provide
     unpublished = asyncio.run(service.unpublish_document(document_id))
     assert unpublished.current_published_version_id is None
     assert repository.unpublish_calls == [document_id]
+
+
+def test_publish_and_unpublish_rebuild_the_affected_profile_or_project_scope() -> None:
+    version_id = uuid4()
+    document_id = uuid4()
+    project_id = uuid4()
+    repository = FakeRepository(None)
+    deduplication = FakeDeduplicationService()
+    service = PublicationService(
+        repository,
+        provider_name="zhipu",
+        model_name="embedding-3",
+        dimensions=1024,
+        dependency_timeout_seconds=1,
+        deduplication_service=deduplication,
+    )
+    repository.publication_result = PublicationStateRecord(
+        document_id=document_id,
+        current_published_version_id=version_id,
+        document_scope="profile",
+        project_id=None,
+    )
+
+    asyncio.run(service.publish_version(version_id))
+
+    repository.publication_result = PublicationStateRecord(
+        document_id=document_id,
+        current_published_version_id=None,
+        document_scope="project",
+        project_id=project_id,
+    )
+    asyncio.run(service.unpublish_document(document_id))
+
+    assert deduplication.profile_calls == 1
+    assert deduplication.project_calls == [project_id]
 
 
 @pytest.mark.parametrize(

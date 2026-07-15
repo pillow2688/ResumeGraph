@@ -36,20 +36,27 @@ export interface DocumentVersion extends DocumentVersionSummary {
 
 export interface KnowledgeDocumentSummary {
   id: string;
-  project_id: string;
+  project_id: string | null;
+  document_scope?: "profile" | "project";
   title: string;
   created_at: string;
   updated_at: string;
   version_count: number;
   latest_version: DocumentVersionSummary | null;
   current_published_version_id?: string | null;
+  current_published_version_number?: number | null;
+  current_chunk_count?: number;
+  current_enabled_chunk_count?: number;
+  current_exact_duplicate_count?: number;
+  current_hard_block_count?: number;
+  current_embedding_count?: number;
 }
 
 export interface KnowledgeDocument extends KnowledgeDocumentSummary {
   project: {
     id: string;
     name: string;
-  };
+  } | null;
 }
 
 export interface CreateDocumentRequest {
@@ -95,6 +102,7 @@ export interface DocumentChunk {
   content_hash: string;
   character_count: number;
   enabled: boolean;
+  disabled_reason?: "hard_block" | "exact_duplicate" | "quality" | "administrator" | null;
   auto_indexable?: boolean | null;
   quality_issues?: Array<Record<string, unknown>>;
   extracted_metadata?: Record<string, unknown>;

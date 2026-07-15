@@ -134,6 +134,17 @@ def test_embedding_defaults_match_the_confirmed_openai_compatible_configuration(
     assert settings.embedding_max_retries == 2
 
 
+def test_single_turn_rag_defaults_are_bounded_and_reuse_deepseek_configuration() -> None:
+    settings = Settings(_env_file=None)
+
+    assert settings.rag_top_k == 6
+    assert settings.rag_max_context_characters == 12_000
+    assert settings.rag_answer_timeout_seconds == 45
+    assert settings.rag_answer_output_retries == 1
+    assert settings.deepseek_base_url == "https://api.deepseek.com"
+    assert settings.deepseek_quality_model == "deepseek-v4-pro"
+
+
 def test_embedding_configuration_loads_unprefixed_environment_and_masks_key(monkeypatch) -> None:
     key = "fictional-openai-compatible-embedding-key"
     monkeypatch.setenv("EMBEDDING_PROVIDER_NAME", "custom-provider")
@@ -172,6 +183,10 @@ def test_embedding_configuration_loads_unprefixed_environment_and_masks_key(monk
         ("embedding_batch_size", 0),
         ("embedding_timeout_seconds", 0),
         ("embedding_max_retries", 5),
+        ("rag_top_k", 0),
+        ("rag_max_context_characters", 0),
+        ("rag_answer_timeout_seconds", 0),
+        ("rag_answer_output_retries", 2),
     ],
 )
 def test_quality_provider_and_rule_bounds_are_validated(field: str, value: object) -> None:

@@ -1,0 +1,29 @@
+from pathlib import Path
+
+import yaml
+
+
+def _compose() -> dict[str, object]:
+    return yaml.safe_load(Path("docker-compose.yml").read_text(encoding="utf-8"))
+
+
+def test_compose_defines_host_only_frontend_behind_healthy_backend() -> None:
+    services = _compose()["services"]
+
+    frontend = services["frontend"]
+    assert frontend["build"] == {"context": "./frontend"}
+    assert frontend["ports"] == ["127.0.0.1:${FRONTEND_PORT:-5173}:80"]
+    assert frontend["depends_on"] == {
+        "backend": {"condition": "service_healthy"},
+    }
+    assert "healthcheck" in services["backend"]
+
+
+def test_frontend_container_serves_spa_and_proxies_same_origin_api() -> None:
+    dockerfile = Path("frontend/Dockerfile").read_text(encoding="utf-8")
+    nginx = Path("frontend/nginx.conf").read_text(encoding="utf-8")
+
+    assert "npm run build" in dockerfile
+    assert "COPY --from=build /app/dist /usr/share/nginx/html" in dockerfile
+    assert "try_files $uri $uri/ /index.html" in nginx
+    assert "proxy_pass http://backend:8000" in nginx

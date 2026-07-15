@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
 import {
   createPastedVersion,
+  deleteDocumentVersion,
   getDocument,
   getDocumentVersion,
   listDocumentVersions,
@@ -25,6 +26,7 @@ import { DocumentDetail } from "./DocumentDetail";
 
 vi.mock("../api/knowledgeDocuments", () => ({
   createPastedVersion: vi.fn(),
+  deleteDocumentVersion: vi.fn(),
   getDocument: vi.fn(),
   getDocumentVersion: vi.fn(),
   listDocumentVersions: vi.fn(),
@@ -81,6 +83,7 @@ const listVersionsMock = vi.mocked(listDocumentVersions);
 const getVersionMock = vi.mocked(getDocumentVersion);
 const updateTitleMock = vi.mocked(updateDocumentTitle);
 const createVersionMock = vi.mocked(createPastedVersion);
+const deleteVersionMock = vi.mocked(deleteDocumentVersion);
 const uploadVersionMock = vi.mocked(uploadVersion);
 const processVersionMock = vi.mocked(processDocumentVersion);
 const publishVersionMock = vi.mocked(publishDocumentVersion);
@@ -106,6 +109,7 @@ describe("DocumentDetail", () => {
     getVersionMock.mockReset();
     updateTitleMock.mockReset();
     createVersionMock.mockReset();
+    deleteVersionMock.mockReset();
     uploadVersionMock.mockReset();
     processVersionMock.mockReset();
     publishVersionMock.mockReset();
@@ -127,7 +131,10 @@ describe("DocumentDetail", () => {
     });
     renderPage();
 
-    await user.click(await screen.findByRole("button", { name: "开始知识索引" }));
+    expect(await screen.findByRole("region", { name: "当前版本工作流" })).toHaveTextContent(
+      "待审核 Chunk",
+    );
+    await user.click(screen.getByRole("button", { name: "审核后建立索引" }));
 
     expect(startIndexingMock).toHaveBeenCalledWith(reviewVersion.id);
     expect(await screen.findByText("文档处理任务")).toBeInTheDocument();
@@ -191,6 +198,38 @@ describe("DocumentDetail", () => {
     expect(preview).toHaveTextContent("<script>alert('xss')</script>");
     expect(preview.tagName).toBe("PRE");
     expect(globalThis.document.querySelector("script")).toBeNull();
+  });
+
+  it("uses Profile context when the shared detail belongs to a global document", async () => {
+    getDocumentMock.mockResolvedValue({
+      ...knowledgeDocument,
+      project_id: null,
+      document_scope: "profile",
+      project: null,
+    });
+    renderPage();
+
+    expect(await screen.findByText("Profile 全局资料")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /返回 Profile 资料/ })).toHaveAttribute(
+      "href",
+      "/admin/profile-documents",
+    );
+  });
+
+  it("permanently deletes only a selected safe non-current version after confirmation", async () => {
+    const user = userEvent.setup();
+    deleteVersionMock.mockResolvedValue(undefined);
+    renderPage();
+
+    await screen.findByTestId("markdown-preview");
+    await user.click(screen.getByRole("button", { name: "删除版本 v1" }));
+    expect(screen.getByRole("alertdialog")).toHaveTextContent(
+      "关联 Chunk、Embedding 和处理任务也会被永久删除",
+    );
+    await user.click(screen.getByRole("button", { name: "确认删除版本" }));
+
+    await waitFor(() => expect(deleteVersionMock).toHaveBeenCalledWith(versionOne.id));
+    expect(screen.queryByRole("button", { name: "版本 v1" })).not.toBeInTheDocument();
   });
 
   it("updates only the document title", async () => {

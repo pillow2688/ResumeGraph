@@ -272,3 +272,36 @@ AI 工程与安全：
 
 Phase 2 已完成，下一阶段尚未开始。未经用户新的明确确认，不得实现 Retriever、RAG、
 LangGraph、Chat、SSE 或下一阶段的设计。完成本总结不授权 Commit、Tag、Push 或 Merge。
+
+## 16. Phase 2 生命周期最终收尾（2026-07-15）
+
+Phase 3 开始前的审计发现 Phase 2 原总结仍是 Project-only。现已完成一次不增加 Phase 编号的
+最小生命周期补丁，本文前面保留的历史验证快照由本节的最新事实补充和纠正。
+
+### 新增可用能力
+
+- 管理员可创建、上传并同时管理多份 Profile 全局资料；Profile 不依附虚拟 Project；
+- Profile 和 Project 文档共用既有不可变 Version、异步处理、Chunk、质量、Embedding 与发布；
+- 当前发布 Profile 全局去重、同一 Project 内去重，不同 Project 永不交叉去重；
+- `disabled_reason` 区分 `hard_block`、`exact_duplicate`、`quality` 与 `administrator`；
+- 下线和永久删除是不同 API 与不同前端确认；
+- 删除非当前安全 Version 或整个 Document 时，由数据库外键级联清理 Chunk、Embedding 与 Job；
+- 发布、下线和删除后执行幂等范围重建，删除旧 canonical 后剩余精确相同 Chunk 可成为新
+  canonical 并获得当前 Embedding；
+- 管理端 `/admin/profile-documents` 展示当前发布版本、Chunk 总数、enabled、精确重复、
+  Hard Block 与 Embedding 数量。
+
+### 最新真实验证
+
+- `uv run ruff check .`：通过；
+- `uv run ruff format --check .`：通过，137 files already formatted；
+- `uv run pytest -q`：493 passed，3 skipped，45.15 seconds；
+- 前端 ESLint、TypeScript、Vite build：通过；Vitest 12 files、69 tests passed；
+- Alembic upgrade/current/check：通过，当前 `e1b7c9d4a2f6 (head)`，无待生成操作；
+- 隔离临时数据库完成 `upgrade head → downgrade c8e4f1a7b2d9 → upgrade head`，随后删除；
+- 真实 PostgreSQL/pgvector 生命周期验收：1 passed；覆盖数据库 scope 约束、Profile 去重、
+  Project 隔离、v2 切换、版本/文档级联、canonical 重选、下线保留和最终清理；
+- 真实智谱 `embedding-3`：1 passed；返回 1024 维向量并完成 pgvector 写入、发布和下线；
+- Docker Compose 配置通过，PostgreSQL 与 Redis 容器健康；测试只使用虚构内容并已清理。
+
+Phase 3 仍未开始。本补丁没有实现 Retriever、RAG、LangGraph、`/interview`、Chat 或 SSE。

@@ -9,6 +9,7 @@ DocumentTitle = Annotated[
     StringConstraints(strip_whitespace=True, min_length=1, max_length=200),
 ]
 DocumentSourceType = Literal["pasted_markdown", "markdown_file"]
+DocumentScope = Literal["profile", "project"]
 DocumentStatus = Literal[
     "draft",
     "processing",
@@ -28,6 +29,10 @@ class KnowledgeDocumentCreateRequest(BaseModel):
 
 class KnowledgeDocumentUpdateRequest(BaseModel):
     title: DocumentTitle
+
+
+class KnowledgeDocumentDeleteRequest(BaseModel):
+    confirmation_title: Annotated[str, StringConstraints(min_length=1, max_length=200)]
 
 
 class DocumentVersionCreateRequest(BaseModel):
@@ -72,14 +77,21 @@ class KnowledgeDocumentSummary(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     id: UUID
-    project_id: UUID
+    project_id: UUID | None
+    document_scope: DocumentScope = "project"
     title: str
     created_at: datetime
     updated_at: datetime
     version_count: int
     latest_version: DocumentVersionSummary | None
     current_published_version_id: UUID | None = None
+    current_published_version_number: int | None = None
+    current_chunk_count: int = 0
+    current_enabled_chunk_count: int = 0
+    current_exact_duplicate_count: int = 0
+    current_hard_block_count: int = 0
+    current_embedding_count: int = 0
 
 
 class KnowledgeDocumentDetail(KnowledgeDocumentSummary):
-    project: DocumentProjectSummary
+    project: DocumentProjectSummary | None

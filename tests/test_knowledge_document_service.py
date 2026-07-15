@@ -63,6 +63,7 @@ def make_document(
         id=document_id,
         project_id=project_id or uuid4(),
         project_name=project_name,
+        document_scope="project",
         title=title,
         created_at=NOW,
         updated_at=NOW,
@@ -113,12 +114,46 @@ class FakeKnowledgeDocumentRepository:
         self.versions[document.id] = [version]
         return document
 
+    async def create_profile_document(self, **kwargs: object) -> KnowledgeDocumentRecord:
+        self._check()
+        self.last_create = kwargs
+        document_id = uuid4()
+        version = make_version(
+            document_id=document_id,
+            content=str(kwargs["raw_content"]),
+            source_type=str(kwargs["source_type"]),
+            original_filename=kwargs["original_filename"],
+        )
+        version = replace(version, content_hash=str(kwargs["content_hash"]))
+        document = KnowledgeDocumentRecord(
+            id=document_id,
+            project_id=None,
+            project_name=None,
+            document_scope="profile",
+            title=str(kwargs["title"]),
+            created_at=NOW,
+            updated_at=NOW,
+            version_count=1,
+            latest_version=version,
+        )
+        self.documents[document.id] = document
+        self.versions[document.id] = [version]
+        return document
+
     async def list_documents(self, project_id: UUID) -> list[KnowledgeDocumentRecord] | None:
         self._check()
         if project_id not in self.projects:
             return None
         return sorted(
             (item for item in self.documents.values() if item.project_id == project_id),
+            key=lambda item: (item.updated_at, str(item.id)),
+            reverse=True,
+        )
+
+    async def list_profile_documents(self) -> list[KnowledgeDocumentRecord]:
+        self._check()
+        return sorted(
+            (item for item in self.documents.values() if item.document_scope == "profile"),
             key=lambda item: (item.updated_at, str(item.id)),
             reverse=True,
         )
@@ -231,6 +266,33 @@ def test_pasted_markdown_creates_document_and_v1_with_hash() -> None:
     }
 
 
+def test_profile_documents_create_multiple_resumes_without_project() -> None:
+    repository = FakeKnowledgeDocumentRepository()
+    service = make_service(repository)
+
+    first = asyncio.run(
+        service.create_profile_document_from_paste(
+            title="AI Agent 岗位版简历",
+            content="# Fictional AI Agent resume",
+        )
+    )
+    second = asyncio.run(
+        service.create_profile_document_from_upload(
+            title="算法岗位版简历",
+            filename="algorithm.md",
+            content=b"# Fictional algorithm resume",
+        )
+    )
+    listed = asyncio.run(service.list_profile_documents())
+
+    assert {item.id for item in listed} == {first.id, second.id}
+    assert all(item.document_scope == "profile" for item in listed)
+    assert all(item.project_id is None for item in listed)
+    assert first.project is None and second.project is None
+    assert second.latest_version is not None
+    assert second.latest_version.original_filename == "algorithm.md"
+
+
 def test_document_summary_exposes_current_published_version_and_published_status() -> None:
     repository = FakeKnowledgeDocumentRepository()
     project_id = uuid4()
@@ -241,6 +303,7 @@ def test_document_summary_exposes_current_published_version_and_published_status
     document = replace(
         document,
         current_published_version_id=published_id,
+        current_published_version_number=1,
         latest_version=replace(document.latest_version, status="published"),
     )
     repository.documents[document.id] = document
@@ -249,6 +312,7 @@ def test_document_summary_exposes_current_published_version_and_published_status
     summary = asyncio.run(make_service(repository).get_document(document.id))
 
     assert summary.current_published_version_id == published_id
+    assert summary.current_published_version_number == 1
     assert summary.latest_version is not None
     assert summary.latest_version.status == "published"
 

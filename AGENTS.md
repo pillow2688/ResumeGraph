@@ -41,22 +41,45 @@ tested.
   [`docs/status/PHASE_2_3_STATUS.md`](docs/status/PHASE_2_3_STATUS.md).
 - **Phase 2.4 — Knowledge enhancement, embedding, and publication: completed.** See
   [`docs/status/PHASE_2_4_STATUS.md`](docs/status/PHASE_2_4_STATUS.md).
-- **Next phase: not started. Waiting for explicit user confirmation before any new phase work.**
-  Real DeepSeek V4 Pro judgment, 智谱 `embedding-3` vectorization,
-  PostgreSQL/pgvector persistence, and publish/unpublish boundaries are verified.
+- **Phase 2 lifecycle closure patch: completed.** Profile-global documents, multiple resumes,
+  current-published-scope exact Chunk deduplication, offline/permanent-delete separation,
+  cascading version cleanup, and canonical/Embedding reselection are implemented as the final
+  Phase 2 closure. This is not a new Phase number.
+- **Phase 3 — Basic RAG interview MVP: completed.** See
+  [`docs/status/PHASE_3_STATUS.md`](docs/status/PHASE_3_STATUS.md) and
+  [`docs/PHASE3_SUMMARY.md`](docs/PHASE3_SUMMARY.md). Real 智谱/DeepSeek calls, Docker Desktop,
+  the five-service Compose stack, real browser three-question flow, Profile/Project Citations,
+  quota, revocation, administrator management, and sanitized browser logs are verified.
+- **Active checkpoint: Phase 3 completed; waiting for user confirmation before Phase 4 planning.**
 
 See `docs/PHASE1_SUMMARY.md` for the verified Phase 1 implementation and validation details.
 
 The final implemented Phase 2 route is documented in [`docs/PHASE2_PLAN.md`](docs/PHASE2_PLAN.md),
 and its complete handoff is in [`docs/PHASE2_SUMMARY.md`](docs/PHASE2_SUMMARY.md).
 
-## Active subsection constraints
+## Active phase constraints
 
 - Phase 2.1 through Phase 2.4 and the overall Phase 2 knowledge-base construction are complete.
+- Existing Phase 2 lifecycle work in the dirty tree must be preserved. Phase 3 retrieval now uses
+  published Profile documents globally and published Project documents only inside the current
+  Grant/request project scope.
 - The approved active Embedding configuration is 智谱 `embedding-3`, 1024 dimensions, batch size
   10, 30-second timeout, and two retries. Secrets are injected only through environment variables.
-- Stop and wait for explicit user confirmation before designing or implementing any next phase.
-- Do not implement retrieval, RAG, Retriever, LangGraph, Chat, or SSE during this checkpoint.
+- Candidate education, personal summary, skills, awards, research direction, and job direction use
+  the implemented Profile document scope. A valid Recruiter Grant implicitly includes published
+  Profile evidence; Project evidence remains constrained by `grant_projects` and requested scope.
+- Phase 3 retrieval joins the current published Version, requires enabled Chunks, validates the
+  active Embedding identity and matching `content_hash`, and returns one Evidence item per identical
+  content hash in the current result.
+- Phase 3 includes administrator account list/create/safe-delete and visible document workflow
+  states/actions, but does not include an administrator retrieval debugger or evaluation platform.
+- Do not implement later behavior early, including LangGraph, multi-turn context,
+  Conversation/Message persistence, SSE, query rewriting, Reflection, multi-agent behavior,
+  Web Search, hybrid search, or reranking.
+- The Phase 3 status, learning, architecture, and summary documents are the current handoff. Phase 4
+  must preserve the Profile-global plus Grant-scoped Project retrieval invariant.
+- A Phase 3 checkpoint must not automatically Commit, Tag, Merge, or Push; Git integration remains
+  the user's decision.
 - Current code, migrations, tests, and the latest subsection status records take precedence over
   obsolete historical plans.
 
@@ -100,6 +123,9 @@ and its complete handoff is in [`docs/PHASE2_SUMMARY.md`](docs/PHASE2_SUMMARY.md
 
 - A completed subsection does not authorize work on the next subsection. Codex may continue only
   after the user explicitly confirms it.
+- Phase 3 is the explicit exception to subsection splitting: once the user authorizes Phase 3
+  implementation, its internal work packages remain one stage and produce one unified checkpoint
+  only after the complete backend, frontend, test, and real-integration scope is finished.
 
 ## Phase subsection checkpoint rule
 

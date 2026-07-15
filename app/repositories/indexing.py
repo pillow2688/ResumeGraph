@@ -31,6 +31,7 @@ class IndexingChunk:
     content_hash: str
     enabled: bool
     auto_indexable: bool | None
+    disabled_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +46,7 @@ class ChunkQualityUpdate:
     chunk_id: UUID
     auto_indexable: bool
     enabled: bool | None
+    disabled_reason: str | None
     quality_issues: tuple[dict[str, str], ...]
     extracted_metadata: dict[str, object]
     quality_checked_at: datetime
@@ -193,6 +195,7 @@ class IndexingRepository:
                         content_hash=chunk.content_hash,
                         enabled=chunk.enabled,
                         auto_indexable=chunk.auto_indexable,
+                        disabled_reason=chunk.disabled_reason,
                     )
                     for chunk in chunk_result.scalars().all()
                 )
@@ -270,6 +273,7 @@ class IndexingRepository:
                     chunk.auto_indexable = update.auto_indexable
                     if update.enabled is not None:
                         chunk.enabled = update.enabled
+                        chunk.disabled_reason = update.disabled_reason
                     chunk.quality_issues = list(update.quality_issues)
                     chunk.extracted_metadata = update.extracted_metadata
                     chunk.quality_checked_at = update.quality_checked_at

@@ -13,6 +13,7 @@ from app.repositories.publication import (
 )
 from app.schemas.ingestion import DocumentChunkResponse
 from app.schemas.publication import PublicationState
+from app.services.deduplication import DeduplicationUnavailableError
 
 
 class ChunkNotFoundError(Exception):
@@ -67,6 +68,12 @@ class PublicationRepositoryBackend(Protocol):
     ) -> PublicationStateRecord | None: ...
 
 
+class DeduplicationServiceBackend(Protocol):
+    async def rebuild_profile_scope(self) -> object: ...
+
+    async def rebuild_project_scope(self, project_id: UUID) -> object: ...
+
+
 async def _await_repository[T](awaitable: Awaitable[T], timeout_seconds: float) -> T:
     try:
         return await asyncio.wait_for(awaitable, timeout=timeout_seconds)
@@ -90,12 +97,14 @@ class PublicationService:
         model_name: str,
         dimensions: int,
         dependency_timeout_seconds: float,
+        deduplication_service: DeduplicationServiceBackend | None = None,
     ) -> None:
         self._repository = repository
         self._provider_name = provider_name
         self._model_name = model_name
         self._dimensions = dimensions
         self._dependency_timeout_seconds = dependency_timeout_seconds
+        self._deduplication_service = deduplication_service
 
     async def set_chunk_enabled(
         self,
@@ -135,6 +144,7 @@ class PublicationService:
             raise PublicationUnavailableError from error
         if record is None:
             raise VersionNotFoundError
+        await self._rebuild_scope(record)
         return PublicationState(**record.__dict__)
 
     async def unpublish_document(self, document_id: UUID) -> PublicationState:
@@ -147,4 +157,24 @@ class PublicationService:
             raise PublicationUnavailableError from error
         if record is None:
             raise DocumentNotFoundError
+        await self._rebuild_scope(record)
         return PublicationState(**record.__dict__)
+
+    async def _rebuild_scope(self, record: PublicationStateRecord) -> None:
+        if self._deduplication_service is None:
+            return
+        try:
+            if record.document_scope == "profile":
+                await _await_repository(
+                    self._deduplication_service.rebuild_profile_scope(),
+                    self._dependency_timeout_seconds,
+                )
+            elif record.project_id is not None:
+                await _await_repository(
+                    self._deduplication_service.rebuild_project_scope(record.project_id),
+                    self._dependency_timeout_seconds,
+                )
+            else:
+                raise PublicationUnavailableError
+        except DeduplicationUnavailableError as error:
+            raise PublicationUnavailableError from error

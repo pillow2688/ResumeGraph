@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError, apiFormRequest, apiRequest } from "./client";
+import { permanentlyDeleteDocument } from "./knowledgeDocuments";
 
 describe("apiRequest", () => {
   const fetchMock = vi.fn<typeof fetch>();
@@ -97,5 +98,18 @@ describe("apiRequest", () => {
     await expect(request).rejects.toEqual(
       new ApiError(500, "unexpected_error", "请求暂时无法完成，请稍后重试。"),
     );
+  });
+
+  it("keeps a permanent-delete confirmation title out of the request URL", async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+
+    await permanentlyDeleteDocument("document-id", "AI Agent 岗位版简历");
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/v1/admin/documents/document-id", {
+      method: "DELETE",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmation_title: "AI Agent 岗位版简历" }),
+    });
   });
 });

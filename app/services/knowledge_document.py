@@ -34,6 +34,18 @@ class KnowledgeDocumentRepositoryBackend(Protocol):
 
     async def list_documents(self, project_id: UUID) -> list[KnowledgeDocumentRecord] | None: ...
 
+    async def create_profile_document(
+        self,
+        *,
+        title: str,
+        source_type: str,
+        original_filename: str | None,
+        raw_content: str,
+        content_hash: str,
+    ) -> KnowledgeDocumentRecord: ...
+
+    async def list_profile_documents(self) -> list[KnowledgeDocumentRecord]: ...
+
     async def get_document(self, document_id: UUID) -> KnowledgeDocumentRecord | None: ...
 
     async def update_document_title(
@@ -177,11 +189,18 @@ def _to_summary(record: KnowledgeDocumentRecord) -> KnowledgeDocumentSummary:
     return KnowledgeDocumentSummary(
         id=record.id,
         project_id=record.project_id,
+        document_scope=record.document_scope,
         title=record.title,
         created_at=record.created_at,
         updated_at=record.updated_at,
         version_count=record.version_count,
         current_published_version_id=record.current_published_version_id,
+        current_published_version_number=record.current_published_version_number,
+        current_chunk_count=record.current_chunk_count,
+        current_enabled_chunk_count=record.current_enabled_chunk_count,
+        current_exact_duplicate_count=record.current_exact_duplicate_count,
+        current_hard_block_count=record.current_hard_block_count,
+        current_embedding_count=record.current_embedding_count,
         latest_version=(
             _to_version_summary(record.latest_version)
             if record.latest_version is not None
@@ -194,7 +213,11 @@ def _to_detail(record: KnowledgeDocumentRecord) -> KnowledgeDocumentDetail:
     summary = _to_summary(record)
     return KnowledgeDocumentDetail(
         **summary.model_dump(),
-        project=DocumentProjectSummary(id=record.project_id, name=record.project_name),
+        project=(
+            DocumentProjectSummary(id=record.project_id, name=record.project_name)
+            if record.project_id is not None and record.project_name is not None
+            else None
+        ),
     )
 
 
@@ -255,6 +278,47 @@ class KnowledgeDocumentService:
             content_hash=content_hash,
         )
 
+    async def create_profile_document_from_paste(
+        self,
+        *,
+        title: str,
+        content: str,
+    ) -> KnowledgeDocumentDetail:
+        normalized_title = _normalize_title(title)
+        raw_content, content_hash = _validate_text_content(
+            content,
+            max_bytes=self._markdown_max_bytes,
+        )
+        return await self._create_profile_document(
+            title=normalized_title,
+            source_type="pasted_markdown",
+            original_filename=None,
+            raw_content=raw_content,
+            content_hash=content_hash,
+        )
+
+    async def create_profile_document_from_upload(
+        self,
+        *,
+        title: str,
+        filename: str,
+        content: bytes,
+    ) -> KnowledgeDocumentDetail:
+        normalized_title = _normalize_title(title)
+        safe_filename = _safe_markdown_filename(filename)
+        decoded = _decode_upload(content, max_bytes=self._markdown_max_bytes)
+        raw_content, content_hash = _validate_text_content(
+            decoded,
+            max_bytes=self._markdown_max_bytes,
+        )
+        return await self._create_profile_document(
+            title=normalized_title,
+            source_type="markdown_file",
+            original_filename=safe_filename,
+            raw_content=raw_content,
+            content_hash=content_hash,
+        )
+
     async def list_documents(self, project_id: UUID) -> list[KnowledgeDocumentSummary]:
         try:
             records = await _await_dependency(
@@ -265,6 +329,16 @@ class KnowledgeDocumentService:
             raise KnowledgeDocumentUnavailableError from error
         if records is None:
             raise ProjectNotFoundError
+        return [_to_summary(record) for record in records]
+
+    async def list_profile_documents(self) -> list[KnowledgeDocumentSummary]:
+        try:
+            records = await _await_dependency(
+                self._repository.list_profile_documents(),
+                self._dependency_timeout_seconds,
+            )
+        except KnowledgeDocumentRepositoryUnavailableError as error:
+            raise KnowledgeDocumentUnavailableError from error
         return [_to_summary(record) for record in records]
 
     async def get_document(self, document_id: UUID) -> KnowledgeDocumentDetail:
@@ -380,6 +454,30 @@ class KnowledgeDocumentService:
             raise KnowledgeDocumentUnavailableError from error
         if record is None:
             raise ProjectNotFoundError
+        return _to_detail(record)
+
+    async def _create_profile_document(
+        self,
+        *,
+        title: str,
+        source_type: str,
+        original_filename: str | None,
+        raw_content: str,
+        content_hash: str,
+    ) -> KnowledgeDocumentDetail:
+        try:
+            record = await _await_dependency(
+                self._repository.create_profile_document(
+                    title=title,
+                    source_type=source_type,
+                    original_filename=original_filename,
+                    raw_content=raw_content,
+                    content_hash=content_hash,
+                ),
+                self._dependency_timeout_seconds,
+            )
+        except KnowledgeDocumentRepositoryUnavailableError as error:
+            raise KnowledgeDocumentUnavailableError from error
         return _to_detail(record)
 
     async def _create_version(

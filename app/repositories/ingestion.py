@@ -43,6 +43,7 @@ class DocumentChunkRecord:
     character_count: int
     enabled: bool
     created_at: datetime
+    disabled_reason: str | None = None
     auto_indexable: bool | None = None
     quality_issues: tuple[dict[str, object], ...] = ()
     extracted_metadata: dict[str, object] | None = None
@@ -116,6 +117,7 @@ def _chunk_record(chunk: DocumentChunk) -> DocumentChunkRecord:
         character_count=chunk.character_count,
         enabled=chunk.enabled,
         created_at=chunk.created_at,
+        disabled_reason=chunk.disabled_reason,
         auto_indexable=chunk.auto_indexable,
         quality_issues=tuple(chunk.quality_issues),
         extracted_metadata=chunk.extracted_metadata,

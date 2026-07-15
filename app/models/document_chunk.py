@@ -37,12 +37,28 @@ class DocumentChunk(Base):
             "character_count >= 0",
             name="ck_document_chunks_character_count_nonnegative",
         ),
+        CheckConstraint(
+            "disabled_reason IS NULL OR disabled_reason IN "
+            "('hard_block', 'exact_duplicate', 'quality', 'administrator')",
+            name="ck_document_chunks_disabled_reason_valid",
+        ),
+        CheckConstraint(
+            "((enabled IS TRUE AND disabled_reason IS NULL) OR "
+            "(enabled IS FALSE AND disabled_reason IS NOT NULL))",
+            name="ck_document_chunks_enabled_reason_consistent",
+        ),
         UniqueConstraint(
             "document_version_id",
             "chunk_index",
             name="uq_document_chunks_version_index",
         ),
         Index("ix_document_chunks_document_version_id", "document_version_id"),
+        Index(
+            "ix_document_chunks_deduplication",
+            "content_hash",
+            "enabled",
+            "disabled_reason",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
@@ -64,6 +80,7 @@ class DocumentChunk(Base):
         default=True,
         server_default=text("true"),
     )
+    disabled_reason: Mapped[str | None] = mapped_column(String(32))
     auto_indexable: Mapped[bool | None] = mapped_column(Boolean)
     quality_issues: Mapped[list[dict[str, object]]] = mapped_column(
         JSONB,

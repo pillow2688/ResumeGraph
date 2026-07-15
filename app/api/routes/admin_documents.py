@@ -1,11 +1,14 @@
 from typing import Annotated, cast
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Request, Response, UploadFile, status
 
 from app.api.dependencies.admin_auth import get_current_admin
 from app.core.exceptions import (
+    ActiveDocumentJobResponseError,
+    DocumentConfirmationMismatchResponseError,
     DocumentNotFoundResponseError,
+    DocumentVersionNotDeletableResponseError,
     DocumentVersionNotFoundResponseError,
     DuplicateDocumentVersionResponseError,
     InvalidDocumentRequestResponseError,
@@ -23,6 +26,7 @@ from app.schemas.knowledge_document import (
     DocumentVersionCreateRequest,
     DocumentVersionSummary,
     KnowledgeDocumentCreateRequest,
+    KnowledgeDocumentDeleteRequest,
     KnowledgeDocumentDetail,
     KnowledgeDocumentSummary,
     KnowledgeDocumentUpdateRequest,
@@ -40,6 +44,19 @@ from app.services.knowledge_document import (
     ProjectNotFoundError,
     UnsupportedMarkdownFileError,
 )
+from app.services.knowledge_lifecycle import (
+    ActiveDocumentJobError,
+    DocumentConfirmationError,
+    KnowledgeLifecycleService,
+    KnowledgeLifecycleUnavailableError,
+    VersionNotDeletableError,
+)
+from app.services.knowledge_lifecycle import (
+    KnowledgeDocumentNotFoundError as LifecycleDocumentNotFoundError,
+)
+from app.services.knowledge_lifecycle import (
+    VersionNotFoundError as LifecycleVersionNotFoundError,
+)
 
 router = APIRouter(tags=["admin-documents"])
 
@@ -54,6 +71,10 @@ DOCUMENT_ERROR_RESPONSES = {
 
 def _service(request: Request) -> KnowledgeDocumentService:
     return cast(KnowledgeDocumentService, request.app.state.knowledge_document_service)
+
+
+def _lifecycle_service(request: Request) -> KnowledgeLifecycleService:
+    return cast(KnowledgeLifecycleService, request.app.state.knowledge_lifecycle_service)
 
 
 async def _read_upload(request: Request, file: UploadFile) -> bytes:
@@ -89,6 +110,77 @@ def _raise_service_error(error: Exception) -> None:
     if isinstance(error, KnowledgeDocumentUnavailableError):
         raise KnowledgeDocumentUnavailableResponseError from error
     raise error
+
+
+@router.post(
+    "/api/v1/admin/profile-documents",
+    response_model=KnowledgeDocumentDetail,
+    status_code=status.HTTP_201_CREATED,
+    responses=DOCUMENT_ERROR_RESPONSES,
+)
+async def create_pasted_profile_document(
+    payload: KnowledgeDocumentCreateRequest,
+    request: Request,
+    _current_admin: Annotated[AdminPrincipal, Depends(get_current_admin)],
+) -> KnowledgeDocumentDetail:
+    try:
+        return await _service(request).create_profile_document_from_paste(
+            title=payload.title,
+            content=payload.content,
+        )
+    except (
+        InvalidDocumentRequestError,
+        MarkdownTooLargeError,
+        InvalidMarkdownEncodingError,
+        InvalidMarkdownContentError,
+        KnowledgeDocumentUnavailableError,
+    ) as error:
+        _raise_service_error(error)
+
+
+@router.post(
+    "/api/v1/admin/profile-documents/upload",
+    response_model=KnowledgeDocumentDetail,
+    status_code=status.HTTP_201_CREATED,
+    responses=DOCUMENT_ERROR_RESPONSES,
+)
+async def create_uploaded_profile_document(
+    request: Request,
+    title: Annotated[str, Form()],
+    file: Annotated[UploadFile, File()],
+    _current_admin: Annotated[AdminPrincipal, Depends(get_current_admin)],
+) -> KnowledgeDocumentDetail:
+    content = await _read_upload(request, file)
+    try:
+        return await _service(request).create_profile_document_from_upload(
+            title=title,
+            filename=file.filename or "",
+            content=content,
+        )
+    except (
+        InvalidDocumentRequestError,
+        UnsupportedMarkdownFileError,
+        MarkdownTooLargeError,
+        InvalidMarkdownEncodingError,
+        InvalidMarkdownContentError,
+        KnowledgeDocumentUnavailableError,
+    ) as error:
+        _raise_service_error(error)
+
+
+@router.get(
+    "/api/v1/admin/profile-documents",
+    response_model=list[KnowledgeDocumentSummary],
+    responses=DOCUMENT_ERROR_RESPONSES,
+)
+async def list_profile_documents(
+    request: Request,
+    _current_admin: Annotated[AdminPrincipal, Depends(get_current_admin)],
+) -> list[KnowledgeDocumentSummary]:
+    try:
+        return await _service(request).list_profile_documents()
+    except KnowledgeDocumentUnavailableError as error:
+        _raise_service_error(error)
 
 
 @router.post(
@@ -324,3 +416,65 @@ async def get_document_version(
         return await _service(request).get_version(version_id)
     except (DocumentVersionNotFoundError, KnowledgeDocumentUnavailableError) as error:
         _raise_service_error(error)
+
+
+@router.delete(
+    "/api/v1/admin/document-versions/{version_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    responses={
+        401: {"description": "Administrator authentication required", "model": ErrorResponse},
+        404: {"description": "Document version not found", "model": ErrorResponse},
+        409: {"description": "Document version deletion is unsafe", "model": ErrorResponse},
+        503: {"description": "Knowledge lifecycle unavailable", "model": ErrorResponse},
+    },
+)
+async def delete_document_version(
+    version_id: UUID,
+    request: Request,
+    _current_admin: Annotated[AdminPrincipal, Depends(get_current_admin)],
+) -> Response:
+    try:
+        await _lifecycle_service(request).delete_version(version_id)
+    except LifecycleVersionNotFoundError as error:
+        raise DocumentVersionNotFoundResponseError from error
+    except VersionNotDeletableError as error:
+        raise DocumentVersionNotDeletableResponseError from error
+    except ActiveDocumentJobError as error:
+        raise ActiveDocumentJobResponseError from error
+    except KnowledgeLifecycleUnavailableError as error:
+        raise KnowledgeDocumentUnavailableResponseError from error
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete(
+    "/api/v1/admin/documents/{document_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    responses={
+        401: {"description": "Administrator authentication required", "model": ErrorResponse},
+        404: {"description": "Knowledge document not found", "model": ErrorResponse},
+        409: {"description": "Permanent deletion is unsafe", "model": ErrorResponse},
+        503: {"description": "Knowledge lifecycle unavailable", "model": ErrorResponse},
+    },
+)
+async def permanently_delete_document(
+    document_id: UUID,
+    payload: KnowledgeDocumentDeleteRequest,
+    request: Request,
+    _current_admin: Annotated[AdminPrincipal, Depends(get_current_admin)],
+) -> Response:
+    try:
+        await _lifecycle_service(request).delete_document(
+            document_id,
+            confirmation=payload.confirmation_title,
+        )
+    except LifecycleDocumentNotFoundError as error:
+        raise DocumentNotFoundResponseError from error
+    except DocumentConfirmationError as error:
+        raise DocumentConfirmationMismatchResponseError from error
+    except ActiveDocumentJobError as error:
+        raise ActiveDocumentJobResponseError from error
+    except KnowledgeLifecycleUnavailableError as error:
+        raise KnowledgeDocumentUnavailableResponseError from error
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

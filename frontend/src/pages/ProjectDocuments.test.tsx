@@ -104,7 +104,31 @@ describe("ProjectDocuments", () => {
     );
     expect(screen.getByText(/1 个版本/)).toBeInTheDocument();
     expect(screen.getByText(/最新 v1/)).toBeInTheDocument();
-    expect(screen.getByText("draft")).toBeInTheDocument();
+    expect(screen.getByText("草稿待处理")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "去处理" })).toHaveAttribute(
+      "href",
+      `/admin/documents/${documentId}`,
+    );
+    expect(screen.getByText(/处理 → Chunk 审核 → 向量索引 → 发布/)).toBeInTheDocument();
+  });
+
+  it("makes a ready version visibly actionable for review and publication", async () => {
+    listDocumentsMock.mockResolvedValue([
+      {
+        ...summary,
+        latest_version: {
+          ...summary.latest_version!,
+          status: "ready_to_publish",
+        },
+      },
+    ]);
+    renderPage();
+
+    expect(await screen.findByText("待发布")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "审核并发布" })).toHaveAttribute(
+      "href",
+      `/admin/documents/${documentId}`,
+    );
   });
 
   it("creates a document from pasted Markdown and navigates to its detail", async () => {

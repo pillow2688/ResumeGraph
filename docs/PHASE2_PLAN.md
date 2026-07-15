@@ -206,3 +206,32 @@ Phase 2.1～2.4 已完成并有各自状态记录。完整总结见
 
 下一阶段尚未开始。任何 Retriever、RAG、LangGraph、Chat 或 SSE 工作都必须先获得用户
 新的明确确认、定义新的范围和验收条件，并遵守新的小节检查点流程。
+
+## 10. Phase 2 生命周期收尾补丁（最终事实）
+
+2026-07-15 在 Phase 3 审计中发现 Project-only 数据模型无法满足多份全局简历和删除后
+canonical 重选，因此 Phase 3 暂停，先完成本补丁。本补丁不产生新的 Phase 编号，仍属于
+Phase 2 最终收尾。
+
+最终数据与管理能力：
+
+- `KnowledgeDocument.document_scope` 明确区分 `profile` 与 `project`；Profile 的
+  `project_id` 必须为空，Project 文档的 `project_id` 必须非空，数据库 Check Constraint
+  强制执行；
+- Profile 与 Project 复用同一套 Document → Version → Processing → Chunk → Quality →
+  Embedding → Publish 流程，没有虚拟 Profile Project 或第二套 Pipeline；
+- 精确去重只按标准化 `content_hash`，范围为所有当前发布 Profile，或同一 `project_id` 的
+  当前发布 Project 文档；不同 Project、不同 hash 的语义相似内容不合并；
+- canonical 按 `created_at`、Chunk UUID 稳定选择，自动重复使用
+  `disabled_reason=exact_duplicate`；Hard Block、质量禁用和管理员禁用不会被重建误启用；
+- 每组精确重复只保留 canonical 的活动 Embedding。删除 canonical 后，剩余 Chunk 会被稳定
+  重选，并复用可用向量或通过现有 Embedding Provider 补向量；
+- 下线只清空 `current_published_version_id` 并保留全部数据；永久删除要求精确标题确认且不存在
+  活动 Job，随后级联删除 Version、Chunk、Embedding 和 Job；
+- 非当前 Version 仅允许在 `draft`、`indexing_failed`、`ready_to_publish`、`superseded`
+  状态删除；活动 Job 返回 409；
+- 管理端新增 `/admin/profile-documents`，并在通用详情页继续完成新版本、Processing、Indexing、
+  发布、下线和安全版本删除。
+
+新增 Migration 为 `e1b7c9d4a2f6_phase_2_lifecycle_patch.py`，没有修改已应用旧 Migration，
+也没有增加 `duplicate_of_chunk_id`、检索、RAG、Conversation 或复杂质量历史。

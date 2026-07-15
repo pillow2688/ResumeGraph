@@ -27,6 +27,7 @@ def make_chunk(
     index: int,
     enabled: bool = True,
     auto_indexable: bool | None = None,
+    disabled_reason: str | None = None,
 ) -> IndexingChunk:
     return IndexingChunk(
         id=uuid4(),
@@ -35,6 +36,7 @@ def make_chunk(
         content_hash=(str(index + 1) * 64)[:64],
         enabled=enabled,
         auto_indexable=auto_indexable,
+        disabled_reason=disabled_reason,
     )
 
 
@@ -182,10 +184,13 @@ def test_worker_applies_rules_before_llm_and_embeds_only_safe_enabled_chunks() -
     updates = {item.chunk_id: item for item in repository.quality_updates}
     assert updates[secret.id].auto_indexable is False
     assert updates[secret.id].enabled is False
+    assert updates[secret.id].disabled_reason == "hard_block"
     assert updates[pii.id].auto_indexable is False
     assert updates[pii.id].enabled is False
+    assert updates[pii.id].disabled_reason == "quality"
     assert updates[clean.id].auto_indexable is True
     assert updates[clean.id].enabled is True
+    assert updates[clean.id].disabled_reason is None
     assert "sk-fictional" not in repr(repository.quality_updates)
     assert "fictional.person" not in repr(repository.quality_updates)
     assert repository.embeddings is not None
@@ -202,6 +207,7 @@ def test_rerun_preserves_existing_admin_enabled_choice_for_non_sensitive_chunks(
         index=0,
         enabled=False,
         auto_indexable=False,
+        disabled_reason="administrator",
     )
     enabled = make_chunk(
         "A clean chunk that remains enabled.",
@@ -219,6 +225,7 @@ def test_rerun_preserves_existing_admin_enabled_choice_for_non_sensitive_chunks(
     updates = {item.chunk_id: item for item in repository.quality_updates}
     assert updates[disabled.id].auto_indexable is True
     assert updates[disabled.id].enabled is None
+    assert updates[disabled.id].disabled_reason is None
     assert updates[enabled.id].enabled is None
     assert repository.embeddings is not None
     assert [item.chunk_id for item in repository.embeddings] == [enabled.id]

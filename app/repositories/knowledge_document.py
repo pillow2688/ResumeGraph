@@ -4,11 +4,17 @@ from datetime import UTC, datetime
 from typing import Protocol
 from uuid import UUID, uuid4
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, distinct, func, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import DocumentVersion, KnowledgeDocument, Project
+from app.models import (
+    ChunkEmbedding,
+    DocumentChunk,
+    DocumentVersion,
+    KnowledgeDocument,
+    Project,
+)
 
 CONTENT_HASH_UNIQUE_CONSTRAINT = "uq_document_versions_document_content_hash"
 
@@ -34,14 +40,21 @@ class DocumentVersionRecord:
 @dataclass(frozen=True)
 class KnowledgeDocumentRecord:
     id: UUID
-    project_id: UUID
-    project_name: str
+    project_id: UUID | None
+    project_name: str | None
     title: str
     created_at: datetime
     updated_at: datetime
     version_count: int
     latest_version: DocumentVersionRecord | None
     current_published_version_id: UUID | None = None
+    current_published_version_number: int | None = None
+    document_scope: str = "project"
+    current_chunk_count: int = 0
+    current_enabled_chunk_count: int = 0
+    current_exact_duplicate_count: int = 0
+    current_hard_block_count: int = 0
+    current_embedding_count: int = 0
 
 
 class DuplicateDocumentVersionRepositoryError(Exception):
@@ -111,6 +124,28 @@ def _latest_version_subquery():
     ).subquery()
 
 
+def _current_metrics_subquery():
+    return (
+        select(
+            DocumentChunk.document_version_id.label("version_id"),
+            func.count(distinct(DocumentChunk.id)).label("current_chunk_count"),
+            func.count(distinct(DocumentChunk.id))
+            .filter(DocumentChunk.enabled.is_(True))
+            .label("current_enabled_chunk_count"),
+            func.count(distinct(DocumentChunk.id))
+            .filter(DocumentChunk.disabled_reason == "exact_duplicate")
+            .label("current_exact_duplicate_count"),
+            func.count(distinct(DocumentChunk.id))
+            .filter(DocumentChunk.disabled_reason == "hard_block")
+            .label("current_hard_block_count"),
+            func.count(distinct(ChunkEmbedding.id)).label("current_embedding_count"),
+        )
+        .outerjoin(ChunkEmbedding, ChunkEmbedding.chunk_id == DocumentChunk.id)
+        .group_by(DocumentChunk.document_version_id)
+        .subquery()
+    )
+
+
 def _record_from_row(row: object) -> KnowledgeDocumentRecord:
     values = tuple(row)
     document = values[0]
@@ -126,6 +161,12 @@ def _record_from_row(row: object) -> KnowledgeDocumentRecord:
         version_created_at,
         content_size_bytes,
         version_count,
+        current_chunk_count,
+        current_enabled_chunk_count,
+        current_exact_duplicate_count,
+        current_hard_block_count,
+        current_embedding_count,
+        current_published_version_number,
     ) = values[2:]
     latest_version = None
     if version_id is not None:
@@ -151,11 +192,25 @@ def _record_from_row(row: object) -> KnowledgeDocumentRecord:
         version_count=int(version_count or 0),
         latest_version=latest_version,
         current_published_version_id=document.current_published_version_id,
+        current_published_version_number=current_published_version_number,
+        document_scope=document.document_scope,
+        current_chunk_count=int(current_chunk_count or 0),
+        current_enabled_chunk_count=int(current_enabled_chunk_count or 0),
+        current_exact_duplicate_count=int(current_exact_duplicate_count or 0),
+        current_hard_block_count=int(current_hard_block_count or 0),
+        current_embedding_count=int(current_embedding_count or 0),
     )
 
 
 def _document_select():
     latest = _latest_version_subquery()
+    metrics = _current_metrics_subquery()
+    current_published_version_number = (
+        select(DocumentVersion.version_number)
+        .where(DocumentVersion.id == KnowledgeDocument.current_published_version_id)
+        .correlate(KnowledgeDocument)
+        .scalar_subquery()
+    )
     return (
         select(
             KnowledgeDocument,
@@ -170,14 +225,24 @@ def _document_select():
             latest.c.version_created_at,
             latest.c.content_size_bytes,
             latest.c.version_count,
+            metrics.c.current_chunk_count,
+            metrics.c.current_enabled_chunk_count,
+            metrics.c.current_exact_duplicate_count,
+            metrics.c.current_hard_block_count,
+            metrics.c.current_embedding_count,
+            current_published_version_number.label("current_published_version_number"),
         )
-        .join(Project, Project.id == KnowledgeDocument.project_id)
+        .outerjoin(Project, Project.id == KnowledgeDocument.project_id)
         .outerjoin(
             latest,
             and_(
                 latest.c.document_id == KnowledgeDocument.id,
                 latest.c.row_number == 1,
             ),
+        )
+        .outerjoin(
+            metrics,
+            metrics.c.version_id == KnowledgeDocument.current_published_version_id,
         )
     )
 
@@ -208,6 +273,7 @@ class KnowledgeDocumentRepository:
                 document = KnowledgeDocument(
                     id=uuid4(),
                     project_id=project_id,
+                    document_scope="project",
                     title=title,
                 )
                 version = DocumentVersion(
@@ -236,6 +302,55 @@ class KnowledgeDocumentRepository:
                     version_count=1,
                     latest_version=_to_version_record(version),
                     current_published_version_id=document.current_published_version_id,
+                    document_scope=document.document_scope,
+                )
+        except (SQLAlchemyError, OSError) as error:
+            raise KnowledgeDocumentRepositoryUnavailableError from error
+
+    async def create_profile_document(
+        self,
+        *,
+        title: str,
+        source_type: str,
+        original_filename: str | None,
+        raw_content: str,
+        content_hash: str,
+    ) -> KnowledgeDocumentRecord:
+        try:
+            async with self._database.session() as session:
+                document = KnowledgeDocument(
+                    id=uuid4(),
+                    project_id=None,
+                    document_scope="profile",
+                    title=title,
+                )
+                version = DocumentVersion(
+                    id=uuid4(),
+                    document_id=document.id,
+                    version_number=1,
+                    source_type=source_type,
+                    original_filename=original_filename,
+                    raw_content=raw_content,
+                    content_hash=content_hash,
+                    status="draft",
+                )
+                session.add(document)
+                session.add(version)
+                await session.flush()
+                await session.refresh(document)
+                await session.refresh(version)
+                await session.commit()
+                return KnowledgeDocumentRecord(
+                    id=document.id,
+                    project_id=None,
+                    project_name=None,
+                    title=document.title,
+                    created_at=document.created_at,
+                    updated_at=document.updated_at,
+                    version_count=1,
+                    latest_version=_to_version_record(version),
+                    current_published_version_id=None,
+                    document_scope="profile",
                 )
         except (SQLAlchemyError, OSError) as error:
             raise KnowledgeDocumentRepositoryUnavailableError from error
@@ -254,6 +369,18 @@ class KnowledgeDocumentRepository:
                 result = await session.execute(
                     _document_select()
                     .where(KnowledgeDocument.project_id == project_id)
+                    .order_by(KnowledgeDocument.updated_at.desc(), KnowledgeDocument.id.desc())
+                )
+                return [_record_from_row(row) for row in result.all()]
+        except (SQLAlchemyError, OSError) as error:
+            raise KnowledgeDocumentRepositoryUnavailableError from error
+
+    async def list_profile_documents(self) -> list[KnowledgeDocumentRecord]:
+        try:
+            async with self._database.session() as session:
+                result = await session.execute(
+                    _document_select()
+                    .where(KnowledgeDocument.document_scope == "profile")
                     .order_by(KnowledgeDocument.updated_at.desc(), KnowledgeDocument.id.desc())
                 )
                 return [_record_from_row(row) for row in result.all()]

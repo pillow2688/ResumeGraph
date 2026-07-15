@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Protocol
 from uuid import UUID, uuid4
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -33,6 +33,16 @@ class AccessGrantRecord:
     revoked_at: datetime | None
     created_at: datetime
     projects: tuple[ProjectRecord, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class RequestQuotaRecord:
+    request_count: int
+    max_requests: int
+
+    @property
+    def remaining_requests(self) -> int:
+        return self.max_requests - self.request_count
 
 
 class AccessGrantProjectNotFoundError(Exception):
@@ -154,6 +164,33 @@ class AccessGrantRepository:
                     grant.revoked_at = revoked_at
                 await session.commit()
                 return _to_record(grant)
+        except (SQLAlchemyError, OSError) as error:
+            raise AccessGrantRepositoryUnavailableError from error
+
+    async def consume_request(self, grant_id: UUID) -> RequestQuotaRecord | None:
+        """Atomically reserve one request without a SELECT/increment race."""
+        statement = (
+            update(AccessGrant)
+            .where(
+                AccessGrant.id == grant_id,
+                AccessGrant.request_count < AccessGrant.max_requests,
+                AccessGrant.revoked_at.is_(None),
+                AccessGrant.expires_at > func.now(),
+            )
+            .values(request_count=AccessGrant.request_count + 1)
+            .returning(AccessGrant.request_count, AccessGrant.max_requests)
+        )
+        try:
+            async with self._database.session() as session:
+                result = await session.execute(statement)
+                row = result.one_or_none()
+                await session.commit()
+                if row is None:
+                    return None
+                return RequestQuotaRecord(
+                    request_count=row[0],
+                    max_requests=row[1],
+                )
         except (SQLAlchemyError, OSError) as error:
             raise AccessGrantRepositoryUnavailableError from error
 

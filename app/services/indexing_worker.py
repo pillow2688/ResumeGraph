@@ -9,7 +9,13 @@ from app.infrastructure.embedding import (
     EmbeddingProviderError,
     EmbeddingProviderNotConfiguredError,
 )
-from app.quality.rules import ChunkRuleInput, RuleConfig, validate_chunks
+from app.quality.rules import (
+    ChunkRuleInput,
+    RuleConfig,
+    RuleIssueCode,
+    RuleSeverity,
+    validate_chunks,
+)
 from app.repositories.indexing import (
     ChunkEmbeddingToSave,
     ChunkQualityUpdate,
@@ -139,6 +145,15 @@ class IndexingWorker:
                 if result.hard_blocked:
                     auto_indexable = False
                     enabled_update: bool | None = False
+                    disabled_reason_update = (
+                        "hard_block"
+                        if any(
+                            issue.severity is RuleSeverity.HARD_BLOCK
+                            and issue.code is not RuleIssueCode.EXACT_DUPLICATE
+                            for issue in result.issues
+                        )
+                        else "exact_duplicate"
+                    )
                     metadata: dict[str, object] = {}
                     quality_model = "deterministic-rules"
                     reason = "Blocked by deterministic safety or duplicate-content rules."
@@ -149,6 +164,7 @@ class IndexingWorker:
                         False if result.contains_personal_contact else decision.is_indexable
                     )
                     enabled_update = auto_indexable if chunk.auto_indexable is None else None
+                    disabled_reason_update = "quality" if enabled_update is False else None
                     if result.redacted_content is None:
                         raise _InvalidQualityBatchError
                     embedding_content_by_id[result.chunk_id] = result.redacted_content
@@ -175,6 +191,7 @@ class IndexingWorker:
                         chunk_id=result.chunk_id,
                         auto_indexable=auto_indexable,
                         enabled=enabled_update,
+                        disabled_reason=disabled_reason_update,
                         quality_issues=issues,
                         extracted_metadata=metadata,
                         quality_checked_at=checked_at,

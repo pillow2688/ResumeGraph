@@ -1,4 +1,5 @@
 from contextlib import AbstractAsyncContextManager
+from enum import StrEnum
 from typing import Protocol
 from uuid import UUID
 
@@ -21,6 +22,12 @@ class DuplicateAdminUsernameError(Exception):
 class AdminRepositoryUnavailableError(Exception):
     def __init__(self) -> None:
         super().__init__("Administrator persistence is unavailable.")
+
+
+class AdminDeleteOutcome(StrEnum):
+    DELETED = "deleted"
+    NOT_FOUND = "not_found"
+    LAST_ADMIN = "last_admin"
 
 
 class AdminUserRepository:
@@ -61,3 +68,32 @@ class AdminUserRepository:
         except SQLAlchemyError as error:
             raise AdminRepositoryUnavailableError from error
         return admin
+
+    async def list_all(self) -> list[AdminUser]:
+        try:
+            async with self._database.session() as session:
+                result = await session.execute(
+                    select(AdminUser).order_by(AdminUser.username, AdminUser.id)
+                )
+                return list(result.scalars().all())
+        except SQLAlchemyError as error:
+            raise AdminRepositoryUnavailableError from error
+
+    async def delete_if_not_last(self, admin_id: UUID) -> AdminDeleteOutcome:
+        """Delete one administrator while serializing the last-admin invariant."""
+        try:
+            async with self._database.session() as session:
+                result = await session.execute(
+                    select(AdminUser).order_by(AdminUser.id).with_for_update()
+                )
+                admins = list(result.scalars().all())
+                target = next((admin for admin in admins if admin.id == admin_id), None)
+                if target is None:
+                    return AdminDeleteOutcome.NOT_FOUND
+                if len(admins) == 1:
+                    return AdminDeleteOutcome.LAST_ADMIN
+                await session.delete(target)
+                await session.commit()
+        except SQLAlchemyError as error:
+            raise AdminRepositoryUnavailableError from error
+        return AdminDeleteOutcome.DELETED

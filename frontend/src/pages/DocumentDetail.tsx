@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { ApiError } from "../api/client";
 import {
   createPastedVersion,
+  deleteDocumentVersion,
   getDocument,
   getDocumentVersion,
   listDocumentVersions,
@@ -15,7 +16,9 @@ import {
   uploadVersion,
 } from "../api/knowledgeDocuments";
 import { Layout } from "../components/Layout";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { MarkdownInputDialog } from "../components/MarkdownInputDialog";
+import { documentStatusLabel } from "../components/DocumentWorkflowStatus";
 import type {
   DocumentVersion,
   DocumentVersionSummary,
@@ -66,6 +69,13 @@ function sourceLabel(version: DocumentVersionSummary): string {
     : "粘贴 Markdown";
 }
 
+const DELETABLE_VERSION_STATUSES = new Set([
+  "draft",
+  "indexing_failed",
+  "ready_to_publish",
+  "superseded",
+]);
+
 export function DocumentDetail() {
   const { documentId = "" } = useParams();
   const navigate = useNavigate();
@@ -86,6 +96,8 @@ export function DocumentDetail() {
   const [isStartingIndexing, setIsStartingIndexing] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isUnpublishing, setIsUnpublishing] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<DocumentVersion | null>(null);
+  const [isDeletingVersion, setIsDeletingVersion] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -284,7 +296,11 @@ export function DocumentDetail() {
       const publishedId = state.current_published_version_id;
       setKnowledgeDocument((current) =>
         current
-          ? { ...current, current_published_version_id: publishedId }
+          ? {
+              ...current,
+              current_published_version_id: publishedId,
+              current_published_version_number: selectedVersion.version_number,
+            }
           : current,
       );
       setVersions((current) =>
@@ -326,7 +342,13 @@ export function DocumentDetail() {
     try {
       await unpublishDocument(documentId);
       setKnowledgeDocument((current) =>
-        current ? { ...current, current_published_version_id: null } : current,
+        current
+          ? {
+              ...current,
+              current_published_version_id: null,
+              current_published_version_number: null,
+            }
+          : current,
       );
       setVersions((current) =>
         current.map((version) =>
@@ -344,6 +366,39 @@ export function DocumentDetail() {
       setActionError("文档下线失败，请稍后重试。");
     } finally {
       setIsUnpublishing(false);
+    }
+  }
+
+  async function permanentlyDeleteSelectedVersion(): Promise<void> {
+    if (!deleteTarget) {
+      return;
+    }
+    setIsDeletingVersion(true);
+    setActionError(null);
+    try {
+      await deleteDocumentVersion(deleteTarget.id);
+      const remaining = versions.filter((version) => version.id !== deleteTarget.id);
+      setVersions(remaining);
+      if (selectedVersion?.id === deleteTarget.id) {
+        const next = remaining[0];
+        setSelectedVersion(next ? await getDocumentVersion(next.id) : null);
+      }
+      setDeleteTarget(null);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        navigate("/admin/login", { replace: true });
+        return;
+      }
+      setActionError(
+        error instanceof ApiError && error.code === "active_document_job"
+          ? "该版本仍有处理或索引任务运行，当前不能删除。"
+          : error instanceof ApiError && error.status === 409
+            ? "该版本当前不能永久删除；当前发布版本必须先下线或切换。"
+            : "版本删除失败，请刷新后重试。",
+      );
+      setDeleteTarget(null);
+    } finally {
+      setIsDeletingVersion(false);
     }
   }
 
@@ -365,17 +420,22 @@ export function DocumentDetail() {
         <>
           <section className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <Link
-                className="text-sm font-semibold text-cyan-700 hover:text-cyan-900"
-                to={`/admin/projects/${knowledgeDocument.project.id}/documents`}
-              >
-                ← 返回项目文档
-              </Link>
+              {knowledgeDocument.document_scope === "profile" || !knowledgeDocument.project ? (
+                <Link className="text-sm font-semibold text-cyan-700 hover:text-cyan-900" to="/admin/profile-documents">
+                  ← 返回 Profile 资料
+                </Link>
+              ) : (
+                <Link className="text-sm font-semibold text-cyan-700 hover:text-cyan-900" to={`/admin/projects/${knowledgeDocument.project.id}/documents`}>
+                  ← 返回项目文档
+                </Link>
+              )}
               <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
                 {knowledgeDocument.title}
               </h1>
               <p className="mt-3 text-sm text-slate-600">
-                所属项目：{knowledgeDocument.project.name}
+                {knowledgeDocument.document_scope === "profile" || !knowledgeDocument.project
+                  ? "Profile 全局资料"
+                  : `所属项目：${knowledgeDocument.project.name}`}
               </p>
             </div>
             <div className="flex gap-3">
@@ -433,6 +493,18 @@ export function DocumentDetail() {
             ) : null}
           </section>
 
+          {selectedVersion ? (
+            <section className="mt-4 rounded-2xl border border-cyan-200 bg-cyan-50 px-5 py-4" aria-label="当前版本工作流">
+              <p className="text-xs font-semibold uppercase tracking-wide text-cyan-800">当前版本工作流</p>
+              <p className="mt-1 text-sm font-semibold text-slate-950">
+                v{selectedVersion.version_number} · {documentStatusLabel(selectedVersion.status)}
+              </p>
+              <p className="mt-2 text-xs leading-5 text-slate-600">
+                处理 → Chunk 审核 → 向量索引 → 发布。页面只会显示当前状态允许执行的下一步操作。
+              </p>
+            </section>
+          ) : null}
+
           <div className="mt-8 grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]">
             <aside className="rounded-2xl border border-slate-200 bg-white p-4">
               <h2 className="px-2 text-sm font-semibold text-slate-950">
@@ -454,7 +526,7 @@ export function DocumentDetail() {
                   >
                     <span className="block font-semibold">版本 v{version.version_number}</span>
                     <span className="mt-1 block truncate text-xs text-slate-500">
-                      {sourceLabel(version)} · {version.status} · {version.content_size_bytes} 字节
+                      {sourceLabel(version)} · {documentStatusLabel(version.status)} · {version.content_size_bytes} 字节
                     </span>
                   </button>
                 ))}
@@ -487,7 +559,7 @@ export function DocumentDetail() {
                       onClick={() => void startIndexing()}
                       type="button"
                     >
-                      {isStartingIndexing ? "正在创建任务…" : "开始知识索引"}
+                      {isStartingIndexing ? "正在创建任务…" : "审核后建立索引"}
                     </button>
                   ) : null}
                   {selectedVersion?.status === "indexing_failed" ? (
@@ -516,6 +588,18 @@ export function DocumentDetail() {
                       type="button"
                     >
                       {isPublishing ? "正在发布…" : "发布此版本"}
+                    </button>
+                  ) : null}
+                  {selectedVersion &&
+                  DELETABLE_VERSION_STATUSES.has(selectedVersion.status) &&
+                  selectedVersion.id !== knowledgeDocument.current_published_version_id ? (
+                    <button
+                      aria-label={`删除版本 v${selectedVersion.version_number}`}
+                      className="rounded-xl border border-rose-300 px-4 py-2.5 text-sm font-semibold text-rose-800"
+                      onClick={() => setDeleteTarget(selectedVersion)}
+                      type="button"
+                    >
+                      删除版本
                     </button>
                   ) : null}
                 </div>
@@ -598,6 +682,17 @@ export function DocumentDetail() {
               onUpload={createVersionFromUpload}
               pasteSubmitLabel="保存新版本"
               uploadSubmitLabel="上传新版本"
+            />
+          ) : null}
+          {deleteTarget ? (
+            <ConfirmDialog
+              busyLabel="正在删除版本…"
+              confirmLabel="确认删除版本"
+              description="该版本及其关联 Chunk、Embedding 和处理任务也会被永久删除，无法撤销。"
+              isConfirming={isDeletingVersion}
+              onCancel={() => setDeleteTarget(null)}
+              onConfirm={permanentlyDeleteSelectedVersion}
+              title={`永久删除版本 v${deleteTarget.version_number}？`}
             />
           ) : null}
         </>

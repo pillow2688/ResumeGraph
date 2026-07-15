@@ -66,6 +66,7 @@ def document_summary() -> KnowledgeDocumentSummary:
     return KnowledgeDocumentSummary(
         id=DOCUMENT_ID,
         project_id=PROJECT_ID,
+        document_scope="project",
         title="Design",
         created_at=NOW,
         updated_at=NOW,
@@ -129,6 +130,44 @@ class FakeDocumentService:
         self._check()
         self.last_call = ("list", {"project_id": project_id})
         return []
+
+    async def create_profile_document_from_paste(
+        self, *, title: str, content: str
+    ) -> KnowledgeDocumentDetail:
+        self._check()
+        self.last_call = ("profile_paste", {"title": title, "content": content})
+        return document_detail().model_copy(
+            update={"project_id": None, "document_scope": "profile", "project": None}
+        )
+
+    async def create_profile_document_from_upload(
+        self, *, title: str, filename: str, content: bytes
+    ) -> KnowledgeDocumentDetail:
+        self._check()
+        self.last_call = (
+            "profile_upload",
+            {"title": title, "filename": filename, "content": content},
+        )
+        return document_detail().model_copy(
+            update={"project_id": None, "document_scope": "profile", "project": None}
+        )
+
+    async def list_profile_documents(self) -> list[KnowledgeDocumentSummary]:
+        self._check()
+        self.last_call = ("profile_list", {})
+        return [
+            document_summary().model_copy(
+                update={
+                    "project_id": None,
+                    "document_scope": "profile",
+                    "current_chunk_count": 5,
+                    "current_enabled_chunk_count": 3,
+                    "current_exact_duplicate_count": 1,
+                    "current_hard_block_count": 1,
+                    "current_embedding_count": 3,
+                }
+            )
+        ]
 
     async def get_document(self, document_id: UUID) -> KnowledgeDocumentDetail:
         self._check()
@@ -229,6 +268,12 @@ def authenticate(client: TestClient, settings: Settings) -> None:
         ),
         ("get", f"/api/v1/admin/documents/{DOCUMENT_ID}/versions", {}),
         ("get", f"/api/v1/admin/document-versions/{VERSION_ID}", {}),
+        (
+            "post",
+            "/api/v1/admin/profile-documents",
+            {"json": {"title": "Resume", "content": "# fictional"}},
+        ),
+        ("get", "/api/v1/admin/profile-documents", {}),
     ],
 )
 def test_all_document_routes_require_admin_and_recruiter_cookie_is_not_admin(
@@ -278,6 +323,33 @@ def test_admin_can_create_documents_from_paste_and_upload_with_201() -> None:
             "content": b"# uploaded",
         },
     )
+
+
+def test_admin_can_create_upload_and_list_multiple_profile_documents() -> None:
+    client, service, settings = make_client()
+
+    with client:
+        authenticate(client, settings)
+        pasted = client.post(
+            "/api/v1/admin/profile-documents",
+            json={"title": "AI Agent resume", "content": "# fictional"},
+        )
+        uploaded = client.post(
+            "/api/v1/admin/profile-documents/upload",
+            data={"title": "Algorithm resume"},
+            files={"file": ("algorithm.md", b"# algorithm")},
+        )
+        listed = client.get("/api/v1/admin/profile-documents")
+
+    assert pasted.status_code == 201
+    assert pasted.json()["document_scope"] == "profile"
+    assert pasted.json()["project_id"] is None
+    assert pasted.json()["project"] is None
+    assert uploaded.status_code == 201
+    assert service.last_call == ("profile_list", {})
+    assert listed.status_code == 200
+    assert listed.json()[0]["current_chunk_count"] == 5
+    assert listed.json()[0]["current_exact_duplicate_count"] == 1
 
 
 def test_admin_can_list_get_patch_and_read_versions() -> None:

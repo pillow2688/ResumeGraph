@@ -242,3 +242,61 @@ not counted in that diff summary. The untracked `.idea/` editor metadata is unre
 be included in the Phase 2 commit. Checkpoint preparation did not automatically stage, commit,
 tag, push, or merge anything. Any later user-authorized completion commit is represented by Git
 history rather than by rewriting this pre-commit evidence.
+
+## 14. Phase 2 lifecycle closure addendum
+
+### Objective and scope correction
+
+The Phase 3 audit exposed a blocking Project-only assumption. Phase 3 was paused and a minimal
+Phase 2 closure patch was completed. This addendum is the latest Phase 2 checkpoint fact and does
+not create Phase 2.5 or begin Phase 3.
+
+### Functionality completed
+
+- Profile-global and Project-scoped Knowledge Documents with database-enforced nullability rules.
+- Multiple Profile resumes through the existing processing, indexing, and publication pipeline.
+- Exact-hash deduplication across current-published Profile documents or within one current-
+  published Project scope, with stable canonical selection and one active Embedding per hash.
+- Explicit disabled sources for hard blocks, exact duplicates, quality decisions, and administrator
+  decisions; protected chunks are never accidentally re-enabled.
+- Separate unpublish and permanent-delete semantics, safe non-current Version deletion, active-Job
+  conflicts, database cascades, and post-mutation deduplication rebuilding.
+- `/admin/profile-documents` plus shared document detail/version/processing/indexing/publication UI.
+
+### Main files
+
+- Migration/models: `e1b7c9d4a2f6_phase_2_lifecycle_patch.py`, Knowledge Document, Document Version,
+  Document Chunk, and Embedding-related model changes.
+- Backend: Profile document repository/service/routes, deduplication repository/service,
+  lifecycle repository/service, publication integration, and application dependency wiring.
+- Frontend: Profile Documents page, shared detail version deletion, API/type/router/navigation.
+- Tests: lifecycle Migration/model/API/repository/service, deduplication, real PostgreSQL lifecycle,
+  and React page coverage.
+
+### Latest verification evidence
+
+- Ruff check passed; Ruff format check reported 137 files already formatted.
+- Full backend suite: 493 passed, 3 skipped in 45.15 seconds.
+- Full frontend suite: 12 files and 69 tests passed; lint, typecheck, and production build passed.
+- Real Alembic current: `e1b7c9d4a2f6 (head)`; check reported no new operations.
+- Isolated safe downgrade cycle passed and its temporary database was removed.
+- Real PostgreSQL/pgvector lifecycle integration passed (`1 passed in 2.35s`).
+- Real 智谱 `embedding-3` + pgvector publication integration passed (`1 passed in 2.60s`).
+- Docker Compose configuration passed; PostgreSQL and Redis were healthy.
+
+### Remaining boundary
+
+Retriever, RAG, LangGraph, interview APIs/pages, Chat, SSE, multi-turn persistence, hybrid search,
+and reranking remain unimplemented. Phase 3 is still not started and requires explicit user
+confirmation. No Commit, Tag, Push, Merge, Reset, Clean, Restore, or Rebase was performed.
+
+### Current Git checkpoint for this addendum
+
+- Branch: `main`.
+- Staged files: 0.
+- Working tree: 38 modified tracked files and 18 untracked entries at capture time.
+- Tracked diff summary: 38 files changed, 1,390 insertions, 43 deletions. Untracked files are not
+  included in that Git diff summary.
+- The pre-existing untracked `.idea/` directory is unrelated editor metadata and was not modified.
+- The pre-existing `AGENTS.md` and untracked `docs/PHASE3_PLAN.md` work was preserved and updated
+  only where this request explicitly required lifecycle status and retrieval-baseline corrections.
