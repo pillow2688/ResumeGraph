@@ -74,6 +74,19 @@ describe("IngestionJob", () => {
     );
   });
 
+  it("shows the embedding stage for a knowledge indexing job", async () => {
+    getJobMock.mockResolvedValue({
+      ...job,
+      job_type: "knowledge_indexing",
+      stage: "embedding",
+      progress: 80,
+    });
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "知识索引任务" })).toBeInTheDocument();
+    expect(screen.getByText("向量生成")).toBeInTheDocument();
+  });
+
   it("redirects an unauthenticated administrator to login", async () => {
     getJobMock.mockRejectedValue(
       new ApiError(401, "authentication_required", "raw cookie details"),

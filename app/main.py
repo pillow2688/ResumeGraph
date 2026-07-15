@@ -9,6 +9,7 @@ from app.api.routes.admin_auth import router as admin_auth_router
 from app.api.routes.admin_documents import router as admin_documents_router
 from app.api.routes.admin_ingestion import router as admin_ingestion_router
 from app.api.routes.admin_projects import router as admin_projects_router
+from app.api.routes.admin_publication import router as admin_publication_router
 from app.api.routes.health import router as health_router
 from app.api.routes.recruiter_access import router as recruiter_access_router
 from app.core.config import Settings
@@ -24,14 +25,18 @@ from app.infrastructure.recruiter_session import RecruiterSessionStore
 from app.infrastructure.redis import RedisConnection, RedisOperations
 from app.repositories.access_grant import AccessGrantRepository
 from app.repositories.admin_user import AdminUserRepository, DatabaseSessionProvider
+from app.repositories.indexing import IndexingRepository
 from app.repositories.ingestion import IngestionRepository
 from app.repositories.knowledge_document import KnowledgeDocumentRepository
 from app.repositories.project import ProjectRepository
+from app.repositories.publication import PublicationRepository
 from app.services.access_grant import AccessGrantService
 from app.services.admin_auth import AdminAuthService
+from app.services.indexing import IndexingService
 from app.services.ingestion import IngestionService
 from app.services.knowledge_document import KnowledgeDocumentService
 from app.services.project import ProjectService
+from app.services.publication import PublicationService
 
 
 def create_app(
@@ -44,6 +49,8 @@ def create_app(
     project_service: ProjectService | None = None,
     knowledge_document_service: KnowledgeDocumentService | None = None,
     ingestion_service: IngestionService | None = None,
+    indexing_service: IndexingService | None = None,
+    publication_service: PublicationService | None = None,
 ) -> FastAPI:
     """Build an application whose shared infrastructure is owned by its lifespan."""
     application_settings = settings or Settings()
@@ -109,23 +116,40 @@ def create_app(
                 dependency_timeout_seconds=application_settings.dependency_timeout_seconds,
             )
         document_processing_service = ingestion_service
-        ingestion_queue: ArqJobQueue | None = None
-        if document_processing_service is None:
-            ingestion_queue = ArqJobQueue(
+        knowledge_indexing_service = indexing_service
+        job_queue: ArqJobQueue | None = None
+        if document_processing_service is None or knowledge_indexing_service is None:
+            job_queue = ArqJobQueue(
                 application_settings.redis_url.get_secret_value(),
                 timeout_seconds=application_settings.dependency_timeout_seconds,
             )
+        if document_processing_service is None:
             document_processing_service = IngestionService(
                 IngestionRepository(cast(DatabaseSessionProvider, database_connection)),
-                ingestion_queue,
+                cast(ArqJobQueue, job_queue),
+                dependency_timeout_seconds=application_settings.dependency_timeout_seconds,
+            )
+        if knowledge_indexing_service is None:
+            knowledge_indexing_service = IndexingService(
+                IndexingRepository(cast(DatabaseSessionProvider, database_connection)),
+                cast(ArqJobQueue, job_queue),
+                dependency_timeout_seconds=application_settings.dependency_timeout_seconds,
+            )
+        knowledge_publication_service = publication_service
+        if knowledge_publication_service is None:
+            knowledge_publication_service = PublicationService(
+                PublicationRepository(cast(DatabaseSessionProvider, database_connection)),
+                provider_name=application_settings.embedding_provider_name,
+                model_name=application_settings.embedding_model,
+                dimensions=application_settings.embedding_dimensions,
                 dependency_timeout_seconds=application_settings.dependency_timeout_seconds,
             )
 
         async with AsyncExitStack() as stack:
             stack.push_async_callback(database_connection.close)
             stack.push_async_callback(redis_connection.close)
-            if ingestion_queue is not None:
-                stack.push_async_callback(ingestion_queue.close)
+            if job_queue is not None:
+                stack.push_async_callback(job_queue.close)
             application.state.settings = application_settings
             application.state.database = database_connection
             application.state.redis = redis_connection
@@ -134,6 +158,8 @@ def create_app(
             application.state.project_service = project_management_service
             application.state.knowledge_document_service = document_management_service
             application.state.ingestion_service = document_processing_service
+            application.state.indexing_service = knowledge_indexing_service
+            application.state.publication_service = knowledge_publication_service
             yield
 
     application = FastAPI(
@@ -148,6 +174,7 @@ def create_app(
     application.include_router(admin_documents_router)
     application.include_router(admin_ingestion_router)
     application.include_router(admin_projects_router)
+    application.include_router(admin_publication_router)
     application.include_router(recruiter_access_router)
     return application
 

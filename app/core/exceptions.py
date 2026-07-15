@@ -283,6 +283,51 @@ class IngestionUnavailableResponseError(AppError):
         )
 
 
+class DocumentChunkNotFoundResponseError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=404,
+            code="document_chunk_not_found",
+            message="Document chunk not found.",
+        )
+
+
+class DocumentChunkNotEditableResponseError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=409,
+            code="document_chunk_not_editable",
+            message="The document chunk cannot be changed in its current version state.",
+        )
+
+
+class KnowledgePublicationUnavailableResponseError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=503,
+            code="service_unavailable",
+            message="Knowledge publication is temporarily unavailable.",
+        )
+
+
+class DocumentVersionNotPublishableResponseError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=409,
+            code="document_version_not_publishable",
+            message="The document version is not ready to publish.",
+        )
+
+
+class PublicationIntegrityResponseError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=409,
+            code="publication_integrity_failed",
+            message="Enabled chunks do not have valid embeddings for the active configuration.",
+        )
+
+
 def _response(
     *,
     status_code: int,

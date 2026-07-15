@@ -231,6 +231,28 @@ def test_pasted_markdown_creates_document_and_v1_with_hash() -> None:
     }
 
 
+def test_document_summary_exposes_current_published_version_and_published_status() -> None:
+    repository = FakeKnowledgeDocumentRepository()
+    project_id = uuid4()
+    repository.projects[project_id] = "ResumeGraph"
+    document = make_document(project_id=project_id)
+    assert document.latest_version is not None
+    published_id = document.latest_version.id
+    document = replace(
+        document,
+        current_published_version_id=published_id,
+        latest_version=replace(document.latest_version, status="published"),
+    )
+    repository.documents[document.id] = document
+    repository.versions[document.id] = [document.latest_version]
+
+    summary = asyncio.run(make_service(repository).get_document(document.id))
+
+    assert summary.current_published_version_id == published_id
+    assert summary.latest_version is not None
+    assert summary.latest_version.status == "published"
+
+
 def test_uploaded_markdown_uses_utf8_bom_and_safe_basename() -> None:
     repository = FakeKnowledgeDocumentRepository()
     project_id = uuid4()

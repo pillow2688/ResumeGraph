@@ -13,6 +13,9 @@ const stageLabels: Record<IngestionJobStage, string> = {
   reading: "读取",
   cleaning: "清洗",
   chunking: "切分",
+  rule_check: "规则检查",
+  llm_quality_check: "DeepSeek 判断",
+  embedding: "向量生成",
   saving: "保存",
 };
 
@@ -82,7 +85,9 @@ export function IngestionJob() {
         <Link className="text-sm font-semibold text-cyan-700" to="/admin/projects">
           ← 返回项目
         </Link>
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight">文档处理任务</h1>
+        <h1 className="mt-3 text-3xl font-semibold tracking-tight">
+          {job?.job_type === "knowledge_indexing" ? "知识索引任务" : "文档处理任务"}
+        </h1>
 
         {isLoading ? (
           <p className="mt-8 text-sm text-slate-600">正在加载任务状态…</p>

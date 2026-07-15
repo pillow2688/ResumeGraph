@@ -1,14 +1,22 @@
 # ResumeGraph
 
-This repository currently implements **Phase 2.3**: the Phase 0 foundation, Phase 1 access
-control, administrator Project and knowledge-document/version management, and asynchronous
-deterministic Markdown processing into review-ready Chunks. PostgreSQL remains the durable
-source of truth; Redis holds sessions, rate-limit counters, and the ephemeral ARQ queue.
+This repository has completed **Phase 2 knowledge-base construction**. Phase 2.1–2.4 now provide
+Project management, versioned Markdown knowledge documents, asynchronous cleaning and Chunking,
+deterministic quality rules, a strict DeepSeek judgment boundary, one unified
+`knowledge_indexing` Job, a generic OpenAI-compatible Embedding Provider, pgvector storage,
+administrator Chunk correction, and atomic publish/unpublish operations. PostgreSQL remains the
+durable source of truth; Redis holds sessions, rate-limit counters, and the ephemeral ARQ queue.
 
-Phase 2.3 accepts saved Markdown versions, creates persistent ingestion Jobs, and uses an
-independent Worker to clean and split content. Successful processing enters
-`ready_for_review`; it does not publish content or implement Chunk editing/review, Embedding,
-pgvector retrieval, RAG, LangGraph, Chat, or LLM calls.
+The approved Embedding configuration is 智谱 `embedding-3`, 1024 dimensions, batch size 10,
+30-second timeout, and two retries. The API key is intentionally absent from Git and must be
+provided through `EMBEDDING_API_KEY`. On 2026-07-15, an opt-in live check using fictional content
+verified DeepSeek V4 Pro judgment, 智谱 `embedding-3` vectorization, PostgreSQL/pgvector storage,
+and the unified publish/unpublish path. Test records were removed after verification. Retrieval,
+RAG, Retriever, LangGraph, Chat, and public-agent behavior remain out of scope.
+
+See the [final Phase 2 route](docs/PHASE2_PLAN.md), [Phase 2 summary](docs/PHASE2_SUMMARY.md), and
+[Phase 2.4 checkpoint](docs/status/PHASE_2_4_STATUS.md). The next phase has not started and requires
+new explicit user confirmation.
 
 ## Architecture
 
@@ -279,6 +287,21 @@ The React administrator UI adds a **开始处理** action, a polling Job page at
 `/admin/document-versions/:versionId/chunks`. Chunk content is still rendered only as literal
 text. Processing success is preparation for a future review phase, never automatic publication.
 
+Phase 2.4 extends the same administrator surface with the following generic APIs:
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| `POST` | `/api/v1/admin/document-versions/{version_id}/index` | Create/recover the single active knowledge-indexing Job. |
+| `PATCH` | `/api/v1/admin/document-chunks/{chunk_id}` | Correct the final `enabled` switch and require re-indexing. |
+| `GET` | `/api/v1/admin/embedding-config` | Show non-secret active Embedding configuration. |
+| `POST` | `/api/v1/admin/document-versions/{version_id}/publish` | Publish only with a complete active-config Embedding set. |
+| `DELETE` | `/api/v1/admin/documents/{document_id}/publication` | Take the document offline. |
+
+The Chunk page shows rule/DeepSeek summaries, warnings, metadata, the active generic Embedding
+configuration, and a simple enabled switch. The Job page shows `rule_check`,
+`llm_quality_check`, `embedding`, and `saving`; the document page shows the current published
+version and publish/offline actions.
+
 Recruiter settings:
 
 - `RESUMEGRAPH_ACCESS_TOKEN_PEPPER`: deployment secret used only for token HMAC; the
@@ -437,14 +460,28 @@ uv run alembic downgrade base
 uv run alembic upgrade head
 ```
 
-## Current limitation
+## Current Phase 2 limitations
 
-Phase 2.3 provides only deterministic processing and read-only Chunk inspection. It does not
-implement Chunk editing, approval/freeze, publication, Embedding, pgvector retrieval, RAG,
-LangGraph, Chat, SSE, PDF, Word, OCR, object storage, or LLM calls. A graceful Worker cancellation
-records `failed`, but a process hard-kill cannot run cleanup and may leave a stale `processing`
-record; this first queue slice deliberately has no lease sweeper or outbox framework. A pending
-Job stranded between PostgreSQL commit and Redis enqueue can be safely re-enqueued by repeating
-the process request. `request_count` deduction, JWT, OAuth, refresh tokens, recruiter accounts,
-and email invitations also remain outside the current scope. Administrator and API deployment
-should remain same-origin; broad CORS is intentionally not configured.
+Phase 2.4 uses a single `OpenAICompatibleEmbeddingProvider`; it does not contain vendor-specific
+Provider classes or a multi-vendor factory. If `EMBEDDING_API_KEY` is empty, production startup
+uses an explicit `UnconfiguredEmbeddingProvider` and indexing fails safely—never by silently
+falling back to the Fake Provider. To run the opt-in live boundary after injecting the secret:
+
+```powershell
+$env:RESUMEGRAPH_RUN_LIVE_EMBEDDING='1'
+$env:EMBEDDING_API_KEY='set-outside-git'
+uv run pytest -q tests/test_phase_2_4_postgres_integration.py -k live
+```
+
+The non-billable real PostgreSQL/pgvector publication boundary can be run with
+`RESUMEGRAPH_RUN_POSTGRES_INTEGRATION=1` and uses fictional data that is removed by the test.
+The live boundary was executed successfully on 2026-07-15 with secrets loaded from the ignored
+local `.env`; no API key is stored in this repository.
+
+There is no pgvector retrieval, Retriever, RAG, LangGraph, Chat, SSE, PDF, Word, OCR, object
+storage, or public question-answering agent in Phase 2. A graceful Worker cancellation records
+`failed`, but a process
+hard-kill cannot run cleanup and may leave a stale `processing` record; there is no lease
+sweeper or outbox framework. `request_count` deduction, JWT, OAuth, refresh tokens, recruiter
+accounts, and email invitations also remain outside the current scope. Administrator and API
+deployment should remain same-origin; broad CORS is intentionally not configured.

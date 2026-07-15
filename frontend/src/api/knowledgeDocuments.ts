@@ -5,9 +5,12 @@ import type {
   DocumentChunk,
   DocumentVersion,
   DocumentVersionSummary,
+  EmbeddingConfig,
   IngestionJob,
   KnowledgeDocument,
   KnowledgeDocumentSummary,
+  PublicationState,
+  UpdateDocumentChunkRequest,
   UpdateDocumentTitleRequest,
 } from "../types/knowledgeDocument";
 import { apiFormRequest, apiRequest } from "./client";
@@ -103,6 +106,15 @@ export function processDocumentVersion(
   );
 }
 
+export function startKnowledgeIndexing(
+  versionId: string,
+): Promise<CreateIngestionJobResponse> {
+  return apiRequest<CreateIngestionJobResponse>(
+    `${adminPath}/document-versions/${versionId}/index`,
+    { method: "POST" },
+  );
+}
+
 export function getIngestionJob(jobId: string): Promise<IngestionJob> {
   return apiRequest<IngestionJob>(`${adminPath}/jobs/${jobId}`);
 }
@@ -111,4 +123,31 @@ export function listDocumentChunks(versionId: string): Promise<DocumentChunk[]> 
   return apiRequest<DocumentChunk[]>(
     `${adminPath}/document-versions/${versionId}/chunks`,
   );
+}
+
+export function updateDocumentChunk(
+  chunkId: string,
+  payload: UpdateDocumentChunkRequest,
+): Promise<DocumentChunk> {
+  return apiRequest<DocumentChunk, UpdateDocumentChunkRequest>(
+    `${adminPath}/document-chunks/${chunkId}`,
+    { method: "PATCH", body: payload },
+  );
+}
+
+export function getEmbeddingConfig(): Promise<EmbeddingConfig> {
+  return apiRequest<EmbeddingConfig>(`${adminPath}/embedding-config`);
+}
+
+export function publishDocumentVersion(versionId: string): Promise<PublicationState> {
+  return apiRequest<PublicationState>(
+    `${adminPath}/document-versions/${versionId}/publish`,
+    { method: "POST" },
+  );
+}
+
+export function unpublishDocument(documentId: string): Promise<PublicationState> {
+  return apiRequest<PublicationState>(`${adminPath}/documents/${documentId}/publication`, {
+    method: "DELETE",
+  });
 }

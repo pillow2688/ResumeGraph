@@ -94,6 +94,91 @@ def test_chunk_size_defaults_to_two_thousand_characters_and_must_be_positive() -
         Settings(chunk_max_characters=0, _env_file=None)
 
 
+def test_quality_provider_defaults_are_bounded_and_thinking_is_disabled() -> None:
+    settings = Settings(_env_file=None)
+
+    assert settings.deepseek_api_key.get_secret_value() == ""
+    assert settings.deepseek_base_url == "https://api.deepseek.com"
+    assert settings.deepseek_quality_model == "deepseek-v4-pro"
+    assert settings.deepseek_quality_thinking_enabled is False
+    assert settings.quality_judge_timeout_seconds == 45
+    assert settings.quality_judge_max_retries == 2
+    assert settings.quality_judge_batch_size == 5
+
+
+def test_quality_provider_loads_prefixed_environment_without_exposing_key(monkeypatch) -> None:
+    key = "fictional-deepseek-key-for-settings-test"
+    monkeypatch.setenv("RESUMEGRAPH_DEEPSEEK_API_KEY", key)
+    monkeypatch.setenv("RESUMEGRAPH_DEEPSEEK_QUALITY_THINKING_ENABLED", "true")
+    monkeypatch.setenv("RESUMEGRAPH_QUALITY_JUDGE_BATCH_SIZE", "8")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.deepseek_api_key.get_secret_value() == key
+    assert settings.deepseek_quality_thinking_enabled is True
+    assert settings.quality_judge_batch_size == 8
+    assert key not in repr(settings)
+
+
+def test_embedding_defaults_match_the_confirmed_openai_compatible_configuration() -> None:
+    settings = Settings(_env_file=None)
+
+    assert settings.embedding_provider_name == "zhipu"
+    assert settings.embedding_base_url == "https://open.bigmodel.cn/api/paas/v4"
+    assert settings.embedding_api_key.get_secret_value() == ""
+    assert settings.embedding_model == "embedding-3"
+    assert settings.embedding_dimensions == 1024
+    assert settings.embedding_send_dimensions is True
+    assert settings.embedding_batch_size == 10
+    assert settings.embedding_timeout_seconds == 30
+    assert settings.embedding_max_retries == 2
+
+
+def test_embedding_configuration_loads_unprefixed_environment_and_masks_key(monkeypatch) -> None:
+    key = "fictional-openai-compatible-embedding-key"
+    monkeypatch.setenv("EMBEDDING_PROVIDER_NAME", "custom-provider")
+    monkeypatch.setenv("EMBEDDING_BASE_URL", "https://custom.example/v1")
+    monkeypatch.setenv("EMBEDDING_API_KEY", key)
+    monkeypatch.setenv("EMBEDDING_MODEL", "custom-embedding")
+    monkeypatch.setenv("EMBEDDING_DIMENSIONS", "512")
+    monkeypatch.setenv("EMBEDDING_SEND_DIMENSIONS", "false")
+    monkeypatch.setenv("EMBEDDING_BATCH_SIZE", "12")
+    monkeypatch.setenv("EMBEDDING_TIMEOUT_SECONDS", "20")
+    monkeypatch.setenv("EMBEDDING_MAX_RETRIES", "1")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.embedding_provider_name == "custom-provider"
+    assert settings.embedding_base_url == "https://custom.example/v1"
+    assert settings.embedding_api_key.get_secret_value() == key
+    assert settings.embedding_model == "custom-embedding"
+    assert settings.embedding_dimensions == 512
+    assert settings.embedding_send_dimensions is False
+    assert settings.embedding_batch_size == 12
+    assert settings.embedding_timeout_seconds == 20
+    assert settings.embedding_max_retries == 1
+    assert key not in repr(settings)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("quality_judge_timeout_seconds", 0),
+        ("quality_judge_max_retries", 5),
+        ("quality_judge_batch_size", 0),
+        ("quality_rule_min_characters", -1),
+        ("quality_rule_abnormal_character_ratio", 1.1),
+        ("embedding_dimensions", 0),
+        ("embedding_batch_size", 0),
+        ("embedding_timeout_seconds", 0),
+        ("embedding_max_retries", 5),
+    ],
+)
+def test_quality_provider_and_rule_bounds_are_validated(field: str, value: object) -> None:
+    with pytest.raises(ValidationError):
+        Settings(**{field: value}, _env_file=None)
+
+
 def test_admin_and_recruiter_cookie_names_must_differ() -> None:
     with pytest.raises(ValidationError, match="cookie names must differ"):
         Settings(

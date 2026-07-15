@@ -8,6 +8,9 @@ import {
   getDocumentVersion,
   listDocumentVersions,
   processDocumentVersion,
+  publishDocumentVersion,
+  startKnowledgeIndexing,
+  unpublishDocument,
   updateDocumentTitle,
   uploadVersion,
 } from "../api/knowledgeDocuments";
@@ -80,6 +83,9 @@ export function DocumentDetail() {
   const [isCreatingVersion, setIsCreatingVersion] = useState(false);
   const [isSavingVersion, setIsSavingVersion] = useState(false);
   const [isStartingProcessing, setIsStartingProcessing] = useState(false);
+  const [isStartingIndexing, setIsStartingIndexing] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [isUnpublishing, setIsUnpublishing] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -240,6 +246,107 @@ export function DocumentDetail() {
     }
   }
 
+  async function startIndexing(): Promise<void> {
+    if (
+      !selectedVersion ||
+      !["ready_for_review", "indexing_failed"].includes(selectedVersion.status)
+    ) {
+      return;
+    }
+    setIsStartingIndexing(true);
+    setActionError(null);
+    try {
+      const created = await startKnowledgeIndexing(selectedVersion.id);
+      navigate(`/admin/jobs/${created.job_id}`);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        navigate("/admin/login", { replace: true });
+        return;
+      }
+      setActionError(
+        error instanceof ApiError && error.status === 409
+          ? "该版本当前不能启动知识索引，请刷新状态后重试。"
+          : "知识索引任务创建失败，请稍后重试。",
+      );
+    } finally {
+      setIsStartingIndexing(false);
+    }
+  }
+
+  async function publishSelectedVersion(): Promise<void> {
+    if (!selectedVersion || selectedVersion.status !== "ready_to_publish") {
+      return;
+    }
+    setIsPublishing(true);
+    setActionError(null);
+    try {
+      const state = await publishDocumentVersion(selectedVersion.id);
+      const publishedId = state.current_published_version_id;
+      setKnowledgeDocument((current) =>
+        current
+          ? { ...current, current_published_version_id: publishedId }
+          : current,
+      );
+      setVersions((current) =>
+        current.map((version) => ({
+          ...version,
+          status:
+            version.id === publishedId
+              ? "published"
+              : version.id === knowledgeDocument?.current_published_version_id
+                ? "superseded"
+                : version.status,
+        })),
+      );
+      setSelectedVersion((current) =>
+        current?.id === publishedId ? { ...current, status: "published" } : current,
+      );
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        navigate("/admin/login", { replace: true });
+        return;
+      }
+      setActionError(
+        error instanceof ApiError && error.code === "publication_integrity_failed"
+          ? "发布校验失败：启用的 Chunk 缺少当前配置对应的有效向量。"
+          : "版本发布失败，请刷新后重试。",
+      );
+    } finally {
+      setIsPublishing(false);
+    }
+  }
+
+  async function takeDocumentOffline(): Promise<void> {
+    if (!knowledgeDocument?.current_published_version_id) {
+      return;
+    }
+    const currentId = knowledgeDocument.current_published_version_id;
+    setIsUnpublishing(true);
+    setActionError(null);
+    try {
+      await unpublishDocument(documentId);
+      setKnowledgeDocument((current) =>
+        current ? { ...current, current_published_version_id: null } : current,
+      );
+      setVersions((current) =>
+        current.map((version) =>
+          version.id === currentId ? { ...version, status: "superseded" } : version,
+        ),
+      );
+      setSelectedVersion((current) =>
+        current?.id === currentId ? { ...current, status: "superseded" } : current,
+      );
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        navigate("/admin/login", { replace: true });
+        return;
+      }
+      setActionError("文档下线失败，请稍后重试。");
+    } finally {
+      setIsUnpublishing(false);
+    }
+  }
+
   return (
     <Layout>
       {isLoading ? (
@@ -305,6 +412,27 @@ export function DocumentDetail() {
             </div>
           ) : null}
 
+          <section className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">发布状态</p>
+              <p className="mt-1 text-sm font-semibold">
+                {knowledgeDocument.current_published_version_id
+                  ? `当前发布：v${versions.find((version) => version.id === knowledgeDocument.current_published_version_id)?.version_number ?? "?"}`
+                  : "当前未发布"}
+              </p>
+            </div>
+            {knowledgeDocument.current_published_version_id ? (
+              <button
+                className="rounded-xl border border-rose-300 bg-white px-4 py-2.5 text-sm font-semibold text-rose-800 disabled:opacity-60"
+                disabled={isUnpublishing}
+                onClick={() => void takeDocumentOffline()}
+                type="button"
+              >
+                {isUnpublishing ? "正在下线…" : "下线文档"}
+              </button>
+            ) : null}
+          </section>
+
           <div className="mt-8 grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]">
             <aside className="rounded-2xl border border-slate-200 bg-white p-4">
               <h2 className="px-2 text-sm font-semibold text-slate-950">
@@ -353,12 +481,42 @@ export function DocumentDetail() {
                     </button>
                   ) : null}
                   {selectedVersion?.status === "ready_for_review" ? (
+                    <button
+                      className="rounded-xl bg-cyan-700 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                      disabled={isStartingIndexing}
+                      onClick={() => void startIndexing()}
+                      type="button"
+                    >
+                      {isStartingIndexing ? "正在创建任务…" : "开始知识索引"}
+                    </button>
+                  ) : null}
+                  {selectedVersion?.status === "indexing_failed" ? (
+                    <button
+                      className="rounded-xl bg-cyan-700 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                      disabled={isStartingIndexing}
+                      onClick={() => void startIndexing()}
+                      type="button"
+                    >
+                      {isStartingIndexing ? "正在创建任务…" : "开始知识索引"}
+                    </button>
+                  ) : null}
+                  {selectedVersion && ["ready_for_review", "indexing_failed", "ready_to_publish", "published", "superseded"].includes(selectedVersion.status) ? (
                     <Link
                       className="rounded-xl bg-cyan-700 px-4 py-2.5 text-sm font-semibold text-white"
                       to={`/admin/document-versions/${selectedVersion.id}/chunks`}
                     >
                       查看 Chunk
                     </Link>
+                  ) : null}
+                  {selectedVersion?.status === "ready_to_publish" ? (
+                    <button
+                      className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                      disabled={isPublishing}
+                      onClick={() => void publishSelectedVersion()}
+                      type="button"
+                    >
+                      {isPublishing ? "正在发布…" : "发布此版本"}
+                    </button>
                   ) : null}
                 </div>
               </div>

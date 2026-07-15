@@ -123,6 +123,7 @@ def test_create_job_returns_existing_active_job_without_reenqueueing() -> None:
     job = IngestionJob(
         id=uuid4(),
         document_version_id=version.id,
+        job_type="document_processing",
         status="processing",
         stage="cleaning",
         progress=25,
@@ -164,6 +165,7 @@ def test_begin_job_sets_processing_reading_and_started_at() -> None:
     job = IngestionJob(
         id=uuid4(),
         document_version_id=version.id,
+        job_type="document_processing",
         status="pending",
         stage="reading",
         progress=0,
@@ -182,11 +184,44 @@ def test_begin_job_sets_processing_reading_and_started_at() -> None:
     assert session.commit_count == 1
 
 
+def test_document_processing_repository_rejects_misrouted_indexing_job() -> None:
+    _document, version = make_version("indexing")
+    job = IngestionJob(
+        id=uuid4(),
+        document_version_id=version.id,
+        job_type="knowledge_indexing",
+        status="pending",
+        stage="rule_check",
+        progress=0,
+        created_at=NOW,
+    )
+    session = FakeSession(results=[[(job, version)]])
+    repository = IngestionRepository(FakeDatabase(session))
+
+    item = asyncio.run(repository.begin_job(job.id))
+
+    assert item is None
+    assert job.status == "pending"
+    assert job.stage == "rule_check"
+    assert version.status == "indexing"
+    assert session.commit_count == 0
+
+
+def test_document_processing_start_does_not_reuse_active_indexing_job() -> None:
+    document, version = make_version("indexing")
+    session = FakeSession(results=[[(version, document)], []])
+    repository = IngestionRepository(FakeDatabase(session))
+
+    with pytest.raises(DocumentVersionNotProcessableRepositoryError):
+        asyncio.run(repository.create_job(version.id))
+
+
 def test_complete_job_replaces_chunks_and_completes_version_atomically() -> None:
     _document, version = make_version("processing")
     job = IngestionJob(
         id=uuid4(),
         document_version_id=version.id,
+        job_type="document_processing",
         status="processing",
         stage="saving",
         progress=85,
@@ -228,6 +263,7 @@ def test_fail_job_records_safe_message_and_restores_draft() -> None:
     job = IngestionJob(
         id=uuid4(),
         document_version_id=version.id,
+        job_type="document_processing",
         status="processing",
         stage="chunking",
         progress=55,

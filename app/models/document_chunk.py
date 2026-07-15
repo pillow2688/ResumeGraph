@@ -19,11 +19,13 @@ from sqlalchemy import (
     func,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 
 if TYPE_CHECKING:
+    from app.models.chunk_embedding import ChunkEmbedding
     from app.models.document_version import DocumentVersion
 
 
@@ -62,9 +64,27 @@ class DocumentChunk(Base):
         default=True,
         server_default=text("true"),
     )
+    auto_indexable: Mapped[bool | None] = mapped_column(Boolean)
+    quality_issues: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB,
+        default=list,
+        server_default=text("'[]'::jsonb"),
+    )
+    extracted_metadata: Mapped[dict[str, object]] = mapped_column(
+        JSONB,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+    )
+    quality_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    quality_model: Mapped[str | None] = mapped_column(String(100))
+    quality_reason: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
     )
 
     document_version: Mapped[DocumentVersion] = relationship(back_populates="chunks")
+    embeddings: Mapped[list[ChunkEmbedding]] = relationship(
+        back_populates="chunk",
+        passive_deletes=True,
+    )

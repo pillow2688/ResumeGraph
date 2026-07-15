@@ -59,6 +59,12 @@ class ArqJobQueue:
         return self._pool
 
     async def enqueue(self, job_id: UUID) -> None:
+        await self._enqueue("process_document_version_job", job_id)
+
+    async def enqueue_indexing(self, job_id: UUID) -> None:
+        await self._enqueue("index_knowledge_version_job", job_id)
+
+    async def _enqueue(self, function_name: str, job_id: UUID) -> None:
         try:
             pool = await asyncio.wait_for(
                 self._get_pool(),
@@ -66,7 +72,7 @@ class ArqJobQueue:
             )
             await asyncio.wait_for(
                 pool.enqueue_job(
-                    "process_document_version_job",
+                    function_name,
                     str(job_id),
                     _job_id=str(job_id),
                     _queue_name=INGESTION_QUEUE_NAME,

@@ -32,8 +32,13 @@ class IngestionJob(Base):
             name="ck_ingestion_jobs_status_valid",
         ),
         CheckConstraint(
-            "stage IN ('reading', 'cleaning', 'chunking', 'saving')",
+            "stage IN ('reading', 'cleaning', 'chunking', 'saving', 'rule_check', "
+            "'llm_quality_check', 'embedding')",
             name="ck_ingestion_jobs_stage_valid",
+        ),
+        CheckConstraint(
+            "job_type IN ('document_processing', 'knowledge_indexing')",
+            name="ck_ingestion_jobs_type_valid",
         ),
         CheckConstraint(
             "progress >= 0 AND progress <= 100",
@@ -53,6 +58,11 @@ class IngestionJob(Base):
     document_version_id: Mapped[UUID] = mapped_column(
         Uuid,
         ForeignKey("document_versions.id", ondelete="CASCADE"),
+    )
+    job_type: Mapped[str] = mapped_column(
+        String(32),
+        default="document_processing",
+        server_default=text("'document_processing'"),
     )
     status: Mapped[str] = mapped_column(
         String(20),

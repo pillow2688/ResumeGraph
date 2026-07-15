@@ -73,11 +73,15 @@ def _job_detail(record: IngestionJobRecord) -> IngestionJobDetail:
         created_at=record.created_at,
         started_at=record.started_at,
         finished_at=record.finished_at,
+        job_type=record.job_type,
     )
 
 
 def _chunk_response(record: DocumentChunkRecord) -> DocumentChunkResponse:
-    return DocumentChunkResponse(**record.__dict__)
+    payload = record.__dict__.copy()
+    if payload["extracted_metadata"] is None:
+        payload["extracted_metadata"] = {}
+    return DocumentChunkResponse(**payload)
 
 
 class IngestionService:

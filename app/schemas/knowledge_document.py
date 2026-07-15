@@ -9,7 +9,16 @@ DocumentTitle = Annotated[
     StringConstraints(strip_whitespace=True, min_length=1, max_length=200),
 ]
 DocumentSourceType = Literal["pasted_markdown", "markdown_file"]
-DocumentStatus = Literal["draft", "processing", "ready_for_review"]
+DocumentStatus = Literal[
+    "draft",
+    "processing",
+    "ready_for_review",
+    "indexing",
+    "indexing_failed",
+    "ready_to_publish",
+    "published",
+    "superseded",
+]
 
 
 class KnowledgeDocumentCreateRequest(BaseModel):
@@ -69,6 +78,7 @@ class KnowledgeDocumentSummary(BaseModel):
     updated_at: datetime
     version_count: int
     latest_version: DocumentVersionSummary | None
+    current_published_version_id: UUID | None = None
 
 
 class KnowledgeDocumentDetail(KnowledgeDocumentSummary):

@@ -18,10 +18,11 @@ from sqlalchemy.orm import configure_mappers
 from app import models
 
 
-def test_phase_2_3_metadata_contains_only_the_requested_tables() -> None:
+def test_phase_2_4_metadata_contains_only_the_requested_tables() -> None:
     assert set(models.Base.metadata.tables) == {
         "access_grants",
         "admin_users",
+        "chunk_embeddings",
         "document_chunks",
         "document_versions",
         "grant_projects",
@@ -58,7 +59,14 @@ def test_phase_2_3_metadata_contains_only_the_requested_tables() -> None:
         ("GrantProject", {"grant_id", "project_id"}),
         (
             "KnowledgeDocument",
-            {"id", "project_id", "title", "created_at", "updated_at"},
+            {
+                "id",
+                "project_id",
+                "title",
+                "current_published_version_id",
+                "created_at",
+                "updated_at",
+            },
         ),
         (
             "DocumentVersion",
@@ -81,6 +89,7 @@ def test_phase_2_3_metadata_contains_only_the_requested_tables() -> None:
                 "document_version_id",
                 "status",
                 "stage",
+                "job_type",
                 "progress",
                 "error_message",
                 "created_at",
@@ -99,6 +108,25 @@ def test_phase_2_3_metadata_contains_only_the_requested_tables() -> None:
                 "content_hash",
                 "character_count",
                 "enabled",
+                "auto_indexable",
+                "quality_issues",
+                "extracted_metadata",
+                "quality_checked_at",
+                "quality_model",
+                "quality_reason",
+                "created_at",
+            },
+        ),
+        (
+            "ChunkEmbedding",
+            {
+                "id",
+                "chunk_id",
+                "embedding",
+                "provider_name",
+                "model_name",
+                "dimensions",
+                "content_hash",
                 "created_at",
             },
         ),
@@ -286,7 +314,10 @@ def test_document_foreign_keys_constraints_and_relationships_prevent_cascade_del
     assert check_constraints == {
         "version_number > 0",
         "source_type IN ('pasted_markdown', 'markdown_file')",
-        "status IN ('draft', 'processing', 'ready_for_review')",
+        (
+            "status IN ('draft', 'processing', 'ready_for_review', 'indexing', "
+            "'indexing_failed', 'ready_to_publish', 'published', 'superseded')"
+        ),
     }
 
     project = models.Project(name="Fictional knowledge project", description="")
@@ -310,7 +341,7 @@ def test_document_foreign_keys_constraints_and_relationships_prevent_cascade_del
     assert models.Project.documents.property.passive_deletes is True
 
 
-def test_phase_2_3_ingestion_models_have_exact_constraints_and_relationships() -> None:
+def test_phase_2_4_indexing_models_have_exact_constraints_and_relationships() -> None:
     configure_mappers()
 
     versions = models.DocumentVersion.__table__
@@ -322,7 +353,7 @@ def test_phase_2_3_ingestion_models_have_exact_constraints_and_relationships() -
         for constraint in versions.constraints
         if isinstance(constraint, CheckConstraint)
     }
-    assert "status IN ('draft', 'processing', 'ready_for_review')" in version_checks
+    assert any("ready_to_publish" in check for check in version_checks)
     assert "status = 'draft'" not in version_checks
 
     job_checks = {
@@ -332,7 +363,11 @@ def test_phase_2_3_ingestion_models_have_exact_constraints_and_relationships() -
     }
     assert job_checks == {
         "status IN ('pending', 'processing', 'completed', 'failed')",
-        "stage IN ('reading', 'cleaning', 'chunking', 'saving')",
+        (
+            "stage IN ('reading', 'cleaning', 'chunking', 'saving', 'rule_check', "
+            "'llm_quality_check', 'embedding')"
+        ),
+        "job_type IN ('document_processing', 'knowledge_indexing')",
         "progress >= 0 AND progress <= 100",
     }
     assert isinstance(jobs.c.error_message.type, Text)
@@ -362,6 +397,18 @@ def test_phase_2_3_ingestion_models_have_exact_constraints_and_relationships() -
         if isinstance(constraint, UniqueConstraint)
     }
     assert chunk_uniques == {("document_version_id", "chunk_index")}
+    assert chunks.c.auto_indexable.nullable is True
+    assert isinstance(chunks.c.quality_issues.type, JSON)
+    assert isinstance(chunks.c.extracted_metadata.type, JSON)
+
+    embeddings = models.ChunkEmbedding.__table__
+    assert embeddings.c.embedding.type.__class__.__name__ == "VECTOR"
+    embedding_uniques = {
+        tuple(column.name for column in constraint.columns)
+        for constraint in embeddings.constraints
+        if isinstance(constraint, UniqueConstraint)
+    }
+    assert embedding_uniques == {("chunk_id", "provider_name", "model_name", "dimensions")}
 
     version = models.DocumentVersion(
         document_id=uuid4(),
@@ -385,14 +432,22 @@ def test_phase_2_3_ingestion_models_have_exact_constraints_and_relationships() -
     assert version.chunks == [chunk]
     assert job.document_version is version
     assert chunk.document_version is version
+    embedding = models.ChunkEmbedding(
+        chunk=chunk,
+        embedding=[0.1, 0.2],
+        model_name="fake-embedding",
+        dimensions=2,
+        content_hash="b" * 64,
+    )
+    assert chunk.embeddings == [embedding]
+    assert embedding.chunk is chunk
 
 
-def test_document_models_do_not_prebuild_phase_2_4_or_later_columns() -> None:
+def test_document_models_do_not_prebuild_rag_or_agent_columns() -> None:
     documents = models.KnowledgeDocument.__table__
     versions = models.DocumentVersion.__table__
 
     prohibited_columns = {
-        "current_published_version_id",
         "published_at",
         "visibility",
         "normalized_content",

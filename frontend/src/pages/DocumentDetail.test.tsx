@@ -10,6 +10,9 @@ import {
   getDocumentVersion,
   listDocumentVersions,
   processDocumentVersion,
+  publishDocumentVersion,
+  startKnowledgeIndexing,
+  unpublishDocument,
   updateDocumentTitle,
   uploadVersion,
 } from "../api/knowledgeDocuments";
@@ -26,6 +29,9 @@ vi.mock("../api/knowledgeDocuments", () => ({
   getDocumentVersion: vi.fn(),
   listDocumentVersions: vi.fn(),
   processDocumentVersion: vi.fn(),
+  publishDocumentVersion: vi.fn(),
+  startKnowledgeIndexing: vi.fn(),
+  unpublishDocument: vi.fn(),
   updateDocumentTitle: vi.fn(),
   uploadVersion: vi.fn(),
 }));
@@ -77,6 +83,9 @@ const updateTitleMock = vi.mocked(updateDocumentTitle);
 const createVersionMock = vi.mocked(createPastedVersion);
 const uploadVersionMock = vi.mocked(uploadVersion);
 const processVersionMock = vi.mocked(processDocumentVersion);
+const publishVersionMock = vi.mocked(publishDocumentVersion);
+const startIndexingMock = vi.mocked(startKnowledgeIndexing);
+const unpublishMock = vi.mocked(unpublishDocument);
 
 function renderPage(): void {
   render(
@@ -99,9 +108,62 @@ describe("DocumentDetail", () => {
     createVersionMock.mockReset();
     uploadVersionMock.mockReset();
     processVersionMock.mockReset();
+    publishVersionMock.mockReset();
+    startIndexingMock.mockReset();
+    unpublishMock.mockReset();
     getDocumentMock.mockResolvedValue(knowledgeDocument);
     listVersionsMock.mockResolvedValue([versionOneSummary]);
     getVersionMock.mockResolvedValue(versionOne);
+  });
+
+  it("starts one knowledge indexing job for a review-ready version", async () => {
+    const user = userEvent.setup();
+    const reviewVersion = { ...versionOne, status: "ready_for_review" as const };
+    listVersionsMock.mockResolvedValue([reviewVersion]);
+    getVersionMock.mockResolvedValue(reviewVersion);
+    startIndexingMock.mockResolvedValue({
+      job_id: "0dc5214a-bf26-42e2-8a51-bf50e54de6fa",
+      status: "pending",
+    });
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "开始知识索引" }));
+
+    expect(startIndexingMock).toHaveBeenCalledWith(reviewVersion.id);
+    expect(await screen.findByText("文档处理任务")).toBeInTheDocument();
+  });
+
+  it("publishes a ready version and can take the current version offline", async () => {
+    const user = userEvent.setup();
+    const readyVersion = { ...versionOne, status: "ready_to_publish" as const };
+    const publishedDocument = {
+      ...knowledgeDocument,
+      current_published_version_id: readyVersion.id,
+    };
+    getDocumentMock.mockResolvedValue({
+      ...knowledgeDocument,
+      current_published_version_id: null,
+    });
+    listVersionsMock.mockResolvedValue([readyVersion]);
+    getVersionMock.mockResolvedValue(readyVersion);
+    publishVersionMock.mockResolvedValue({
+      document_id: documentId,
+      current_published_version_id: readyVersion.id,
+    });
+    unpublishMock.mockResolvedValue({
+      document_id: documentId,
+      current_published_version_id: null,
+    });
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "发布此版本" }));
+    expect(publishVersionMock).toHaveBeenCalledWith(readyVersion.id);
+    expect(await screen.findByText("当前发布：v1")).toBeInTheDocument();
+
+    getDocumentMock.mockResolvedValue(publishedDocument);
+    await user.click(screen.getByRole("button", { name: "下线文档" }));
+    expect(unpublishMock).toHaveBeenCalledWith(documentId);
+    expect(await screen.findByText("当前未发布")).toBeInTheDocument();
   });
 
   it("starts processing the selected draft and opens its job page", async () => {

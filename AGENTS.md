@@ -31,25 +31,34 @@ tested.
 
 - **Phase 0 — Backend foundation: completed.**
 - **Phase 1 — Access control: completed.**
-- **Phase 2 — Knowledge-base construction and publication: in progress.**
+- **Phase 2 — Knowledge-base construction and publication: completed.** See
+  [`docs/PHASE2_SUMMARY.md`](docs/PHASE2_SUMMARY.md).
 - **Phase 2.1 — Project management product slice: completed.** See
   [`docs/status/PHASE_2_1_STATUS.md`](docs/status/PHASE_2_1_STATUS.md).
-- **Phase 2.2 completed.** See
+- **Phase 2.2 — Knowledge documents and version management: completed.** See
   [`docs/status/PHASE_2_2_STATUS.md`](docs/status/PHASE_2_2_STATUS.md).
 - **Phase 2.3 — Document processing and chunking: completed.** See
   [`docs/status/PHASE_2_3_STATUS.md`](docs/status/PHASE_2_3_STATUS.md).
-- **Active checkpoint: Phase 2.3 complete; waiting for explicit user confirmation before Phase 2.4.**
+- **Phase 2.4 — Knowledge enhancement, embedding, and publication: completed.** See
+  [`docs/status/PHASE_2_4_STATUS.md`](docs/status/PHASE_2_4_STATUS.md).
+- **Next phase: not started. Waiting for explicit user confirmation before any new phase work.**
+  Real DeepSeek V4 Pro judgment, 智谱 `embedding-3` vectorization,
+  PostgreSQL/pgvector persistence, and publish/unpublish boundaries are verified.
 
 See `docs/PHASE1_SUMMARY.md` for the verified Phase 1 implementation and validation details.
 
-The high-level Phase 2 plan is documented in `docs/PHASE2_PLAN.md`.
+The final implemented Phase 2 route is documented in [`docs/PHASE2_PLAN.md`](docs/PHASE2_PLAN.md),
+and its complete handoff is in [`docs/PHASE2_SUMMARY.md`](docs/PHASE2_SUMMARY.md).
 
 ## Active subsection constraints
 
-- Phase 2.3 asynchronous document processing and Chunk construction and its
-  `docs/status/PHASE_2_3_STATUS.md` checkpoint are complete.
-- Stop and wait for explicit user confirmation before beginning Phase 2.4.
-- Phase 2.4 through Phase 2.6 are context only and must not be implemented early.
+- Phase 2.1 through Phase 2.4 and the overall Phase 2 knowledge-base construction are complete.
+- The approved active Embedding configuration is 智谱 `embedding-3`, 1024 dimensions, batch size
+  10, 30-second timeout, and two retries. Secrets are injected only through environment variables.
+- Stop and wait for explicit user confirmation before designing or implementing any next phase.
+- Do not implement retrieval, RAG, Retriever, LangGraph, Chat, or SSE during this checkpoint.
+- Current code, migrations, tests, and the latest subsection status records take precedence over
+  obsolete historical plans.
 
 ## Implemented Phase 1 boundaries
 
@@ -96,6 +105,12 @@ The high-level Phase 2 plan is documented in `docs/PHASE2_PLAN.md`.
 
 Every completed Phase subsection, for example Phase 1.1, Phase 1.2, Phase 1.3, Phase 2.1, or
 Phase 2.2, requires its own checkpoint record before any work begins on the next subsection.
+
+Each future subsection closure must produce three complementary records when the architecture or
+learning surface changed: a concise status checkpoint under `docs/status/`, beginner-oriented
+learning notes under `docs/learning/`, and current architecture diagrams under
+`docs/architecture/`. These records must describe implemented facts, not speculative next-phase
+design.
 
 Each subsection checkpoint record must include at least:
 

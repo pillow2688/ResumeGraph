@@ -39,7 +39,8 @@ class DocumentVersion(Base):
             name="ck_document_versions_source_type_valid",
         ),
         CheckConstraint(
-            "status IN ('draft', 'processing', 'ready_for_review')",
+            "status IN ('draft', 'processing', 'ready_for_review', 'indexing', "
+            "'indexing_failed', 'ready_to_publish', 'published', 'superseded')",
             name="ck_document_versions_status_valid",
         ),
         UniqueConstraint(
@@ -72,7 +73,10 @@ class DocumentVersion(Base):
         server_default=func.now(),
     )
 
-    document: Mapped[KnowledgeDocument] = relationship(back_populates="versions")
+    document: Mapped[KnowledgeDocument] = relationship(
+        back_populates="versions",
+        foreign_keys=[document_id],
+    )
     ingestion_jobs: Mapped[list[IngestionJob]] = relationship(
         back_populates="document_version",
         passive_deletes=True,

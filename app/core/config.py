@@ -1,6 +1,6 @@
 from typing import Literal, Self
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import AliasChoices, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,6 +13,7 @@ class Settings(BaseSettings):
         env_prefix="RESUMEGRAPH_",
         extra="ignore",
         frozen=True,
+        populate_by_name=True,
     )
 
     app_name: str = "ResumeGraph API"
@@ -53,6 +54,101 @@ class Settings(BaseSettings):
     )
     markdown_max_bytes: int = Field(default=1024 * 1024, gt=0)
     chunk_max_characters: int = Field(default=2_000, gt=0, le=100_000)
+    deepseek_api_key: SecretStr = SecretStr("")
+    deepseek_base_url: str = Field(
+        default="https://api.deepseek.com",
+        min_length=1,
+        max_length=500,
+    )
+    deepseek_quality_model: str = Field(
+        default="deepseek-v4-pro",
+        min_length=1,
+        max_length=100,
+    )
+    deepseek_quality_thinking_enabled: bool = False
+    quality_judge_timeout_seconds: float = Field(default=45, gt=0, le=120)
+    quality_judge_max_retries: int = Field(default=2, ge=0, le=4)
+    quality_judge_batch_size: int = Field(default=5, gt=0, le=20)
+    quality_rule_min_characters: int = Field(default=80, ge=0, le=10_000)
+    quality_rule_max_characters: int = Field(default=6_000, gt=0, le=100_000)
+    quality_rule_abnormal_character_ratio: float = Field(default=0.1, gt=0, le=1)
+    embedding_provider_name: str = Field(
+        default="zhipu",
+        min_length=1,
+        max_length=100,
+        validation_alias=AliasChoices(
+            "EMBEDDING_PROVIDER_NAME",
+            "RESUMEGRAPH_EMBEDDING_PROVIDER_NAME",
+        ),
+    )
+    embedding_base_url: str = Field(
+        default="https://open.bigmodel.cn/api/paas/v4",
+        min_length=1,
+        max_length=500,
+        validation_alias=AliasChoices(
+            "EMBEDDING_BASE_URL",
+            "RESUMEGRAPH_EMBEDDING_BASE_URL",
+        ),
+    )
+    embedding_api_key: SecretStr = Field(
+        default=SecretStr(""),
+        validation_alias=AliasChoices(
+            "EMBEDDING_API_KEY",
+            "RESUMEGRAPH_EMBEDDING_API_KEY",
+        ),
+    )
+    embedding_model: str = Field(
+        default="embedding-3",
+        min_length=1,
+        max_length=100,
+        validation_alias=AliasChoices(
+            "EMBEDDING_MODEL",
+            "RESUMEGRAPH_EMBEDDING_MODEL",
+        ),
+    )
+    embedding_dimensions: int = Field(
+        default=1024,
+        gt=0,
+        le=100_000,
+        validation_alias=AliasChoices(
+            "EMBEDDING_DIMENSIONS",
+            "RESUMEGRAPH_EMBEDDING_DIMENSIONS",
+        ),
+    )
+    embedding_send_dimensions: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "EMBEDDING_SEND_DIMENSIONS",
+            "RESUMEGRAPH_EMBEDDING_SEND_DIMENSIONS",
+        ),
+    )
+    embedding_batch_size: int = Field(
+        default=10,
+        gt=0,
+        le=2_048,
+        validation_alias=AliasChoices(
+            "EMBEDDING_BATCH_SIZE",
+            "RESUMEGRAPH_EMBEDDING_BATCH_SIZE",
+        ),
+    )
+    embedding_timeout_seconds: float = Field(
+        default=30,
+        gt=0,
+        le=300,
+        validation_alias=AliasChoices(
+            "EMBEDDING_TIMEOUT_SECONDS",
+            "RESUMEGRAPH_EMBEDDING_TIMEOUT_SECONDS",
+        ),
+    )
+    embedding_max_retries: int = Field(
+        default=2,
+        ge=0,
+        le=4,
+        validation_alias=AliasChoices(
+            "EMBEDDING_MAX_RETRIES",
+            "RESUMEGRAPH_EMBEDDING_MAX_RETRIES",
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_security_settings(self) -> Self:
@@ -66,4 +162,6 @@ class Settings(BaseSettings):
             == "local-development-access-token-pepper-change-me"
         ):
             raise ValueError("RESUMEGRAPH_ACCESS_TOKEN_PEPPER must be changed in production.")
+        if self.quality_rule_max_characters <= self.quality_rule_min_characters:
+            raise ValueError("RESUMEGRAPH_QUALITY_RULE_MAX_CHARACTERS must exceed the minimum.")
         return self

@@ -41,6 +41,7 @@ class KnowledgeDocumentRecord:
     updated_at: datetime
     version_count: int
     latest_version: DocumentVersionRecord | None
+    current_published_version_id: UUID | None = None
 
 
 class DuplicateDocumentVersionRepositoryError(Exception):
@@ -149,6 +150,7 @@ def _record_from_row(row: object) -> KnowledgeDocumentRecord:
         updated_at=document.updated_at,
         version_count=int(version_count or 0),
         latest_version=latest_version,
+        current_published_version_id=document.current_published_version_id,
     )
 
 
@@ -233,6 +235,7 @@ class KnowledgeDocumentRepository:
                     updated_at=document.updated_at,
                     version_count=1,
                     latest_version=_to_version_record(version),
+                    current_published_version_id=document.current_published_version_id,
                 )
         except (SQLAlchemyError, OSError) as error:
             raise KnowledgeDocumentRepositoryUnavailableError from error

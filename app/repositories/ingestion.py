@@ -29,6 +29,7 @@ class IngestionJobRecord:
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+    job_type: str = "document_processing"
 
 
 @dataclass(frozen=True)
@@ -42,6 +43,12 @@ class DocumentChunkRecord:
     character_count: int
     enabled: bool
     created_at: datetime
+    auto_indexable: bool | None = None
+    quality_issues: tuple[dict[str, object], ...] = ()
+    extracted_metadata: dict[str, object] | None = None
+    quality_checked_at: datetime | None = None
+    quality_model: str | None = None
+    quality_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -94,6 +101,7 @@ def _job_record(
         created_at=job.created_at,
         started_at=job.started_at,
         finished_at=job.finished_at,
+        job_type=job.job_type,
     )
 
 
@@ -108,6 +116,12 @@ def _chunk_record(chunk: DocumentChunk) -> DocumentChunkRecord:
         character_count=chunk.character_count,
         enabled=chunk.enabled,
         created_at=chunk.created_at,
+        auto_indexable=chunk.auto_indexable,
+        quality_issues=tuple(chunk.quality_issues),
+        extracted_metadata=chunk.extracted_metadata,
+        quality_checked_at=chunk.quality_checked_at,
+        quality_model=chunk.quality_model,
+        quality_reason=chunk.quality_reason,
     )
 
 
@@ -131,13 +145,14 @@ class IngestionRepository:
                 if row is None:
                     return None
                 version, document = row
-                if version.status == "ready_for_review":
+                if version.status not in {"draft", "processing"}:
                     raise DocumentVersionNotProcessableRepositoryError
 
                 active_result = await session.execute(
                     select(IngestionJob)
                     .where(
                         IngestionJob.document_version_id == version_id,
+                        IngestionJob.job_type == "document_processing",
                         IngestionJob.status.in_(("pending", "processing")),
                     )
                     .order_by(IngestionJob.created_at.desc())
@@ -149,10 +164,13 @@ class IngestionRepository:
                         record=_job_record(active_job, version, document),
                         created=False,
                     )
+                if version.status != "draft":
+                    raise DocumentVersionNotProcessableRepositoryError
 
                 job = IngestionJob(
                     id=uuid4(),
                     document_version_id=version_id,
+                    job_type="document_processing",
                     status="pending",
                     stage="reading",
                     progress=0,
@@ -187,7 +205,10 @@ class IngestionRepository:
                 if row is None:
                     return
                 job, version = row
-                if job.status not in {"pending", "processing"}:
+                if job.job_type != "document_processing" or job.status not in {
+                    "pending",
+                    "processing",
+                }:
                     return
                 job.status = "failed"
                 job.error_message = error_message
@@ -252,7 +273,10 @@ class IngestionRepository:
                 if row is None:
                     return None
                 job, version = row
-                if job.status not in {"pending", "processing"}:
+                if job.job_type != "document_processing" or job.status not in {
+                    "pending",
+                    "processing",
+                }:
                     return None
                 now = datetime.now(UTC)
                 job.status = "processing"
@@ -278,7 +302,11 @@ class IngestionRepository:
                     select(IngestionJob).where(IngestionJob.id == job_id).with_for_update()
                 )
                 job = result.scalar_one_or_none()
-                if job is None or job.status != "processing":
+                if (
+                    job is None
+                    or job.job_type != "document_processing"
+                    or job.status != "processing"
+                ):
                     return False
                 job.stage = stage
                 job.progress = progress
@@ -305,7 +333,7 @@ class IngestionRepository:
                 if row is None:
                     return False
                 job, version = row
-                if job.status != "processing":
+                if job.job_type != "document_processing" or job.status != "processing":
                     return False
                 await session.execute(
                     delete(DocumentChunk).where(DocumentChunk.document_version_id == version.id)
@@ -352,7 +380,10 @@ class IngestionRepository:
                 if row is None:
                     return
                 job, version = row
-                if job.status not in {"pending", "processing"}:
+                if job.job_type != "document_processing" or job.status not in {
+                    "pending",
+                    "processing",
+                }:
                     return
                 job.status = "failed"
                 job.error_message = error_message

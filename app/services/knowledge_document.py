@@ -181,6 +181,7 @@ def _to_summary(record: KnowledgeDocumentRecord) -> KnowledgeDocumentSummary:
         created_at=record.created_at,
         updated_at=record.updated_at,
         version_count=record.version_count,
+        current_published_version_id=record.current_published_version_id,
         latest_version=(
             _to_version_summary(record.latest_version)
             if record.latest_version is not None

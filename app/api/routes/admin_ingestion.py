@@ -17,6 +17,12 @@ from app.schemas.ingestion import (
     IngestionJobCreateResponse,
     IngestionJobDetail,
 )
+from app.services.indexing import (
+    IndexingService,
+    IndexingUnavailableError,
+    IndexingVersionNotFoundError,
+    IndexingVersionNotProcessableError,
+)
 from app.services.ingestion import (
     DocumentVersionNotProcessableError,
     IngestionJobNotFoundError,
@@ -35,6 +41,10 @@ INGESTION_ERROR_RESPONSES = {
 
 def _service(request: Request) -> IngestionService:
     return cast(IngestionService, request.app.state.ingestion_service)
+
+
+def _indexing_service(request: Request) -> IndexingService:
+    return cast(IndexingService, request.app.state.indexing_service)
 
 
 def _raise_service_error(error: Exception) -> None:
@@ -72,6 +82,31 @@ async def create_ingestion_job(
         IngestionUnavailableError,
     ) as error:
         _raise_service_error(error)
+
+
+@router.post(
+    "/api/v1/admin/document-versions/{version_id}/index",
+    response_model=IngestionJobCreateResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    responses={
+        **INGESTION_ERROR_RESPONSES,
+        404: {"description": "Document version not found", "model": ErrorResponse},
+        409: {"description": "Document version not processable", "model": ErrorResponse},
+    },
+)
+async def create_indexing_job(
+    version_id: UUID,
+    request: Request,
+    _current_admin: Annotated[AdminPrincipal, Depends(get_current_admin)],
+) -> IngestionJobCreateResponse:
+    try:
+        return await _indexing_service(request).create_job(version_id)
+    except IndexingVersionNotFoundError as error:
+        raise DocumentVersionNotFoundResponseError from error
+    except IndexingVersionNotProcessableError as error:
+        raise DocumentVersionNotProcessableResponseError from error
+    except IndexingUnavailableError as error:
+        raise IngestionUnavailableResponseError from error
 
 
 @router.get(
