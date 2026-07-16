@@ -8,6 +8,7 @@ from app.models.grant_project import GrantProject
 from app.models.ingestion_job import IngestionJob
 from app.models.knowledge_document import KnowledgeDocument
 from app.models.project import Project
+from app.models.public_demo_config import PublicDemoConfig
 
 __all__ = [
     "AccessGrant",
@@ -20,4 +21,5 @@ __all__ = [
     "KnowledgeDocument",
     "IngestionJob",
     "Project",
+    "PublicDemoConfig",
 ]

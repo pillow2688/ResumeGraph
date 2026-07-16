@@ -24,14 +24,14 @@ function formatDate(value: string): string {
 export function ProjectCard({ project, onDelete, onEdit }: ProjectCardProps) {
   return (
     <article
-      className="group flex min-h-64 flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+      className="group flex min-h-64 flex-col rounded-3xl border border-black/5 bg-white p-6 shadow-[0_10px_35px_rgba(0,0,0,0.035)] transition hover:border-neutral-200"
       data-testid={`project-${project.id}`}
     >
       <div className="mb-5 flex items-start justify-between gap-4">
-        <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-cyan-50 text-lg font-semibold text-cyan-800">
+        <div className="grid size-11 shrink-0 place-items-center rounded-2xl bg-neutral-100 text-lg font-semibold text-neutral-800">
           {project.name.slice(0, 1).toUpperCase()}
         </div>
-        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
+        <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-600">
           Project
         </span>
       </div>
@@ -45,7 +45,7 @@ export function ProjectCard({ project, onDelete, onEdit }: ProjectCardProps) {
         <p className="text-xs text-slate-500">更新于 {formatDate(project.updated_at)}</p>
         <div className="flex items-center gap-2">
           <Link
-            className="rounded-lg px-3 py-2 text-sm font-medium text-cyan-800 transition hover:bg-cyan-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-700"
+            className="rounded-lg px-3 py-2 text-sm font-medium text-neutral-900 transition hover:bg-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-700"
             to={`/admin/projects/${project.id}/documents`}
           >
             知识文档

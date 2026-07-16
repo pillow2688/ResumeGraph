@@ -9,10 +9,12 @@ from app.api.routes.admin_auth import router as admin_auth_router
 from app.api.routes.admin_documents import router as admin_documents_router
 from app.api.routes.admin_ingestion import router as admin_ingestion_router
 from app.api.routes.admin_projects import router as admin_projects_router
+from app.api.routes.admin_public_demo import router as admin_public_demo_router
 from app.api.routes.admin_publication import router as admin_publication_router
 from app.api.routes.admin_users import router as admin_users_router
 from app.api.routes.health import router as health_router
 from app.api.routes.interview import router as interview_router
+from app.api.routes.public_demo import router as public_demo_router
 from app.api.routes.recruiter_access import router as recruiter_access_router
 from app.core.config import Settings
 from app.core.exceptions import install_exception_handlers
@@ -45,6 +47,7 @@ from app.repositories.ingestion import IngestionRepository
 from app.repositories.knowledge_document import KnowledgeDocumentRepository
 from app.repositories.knowledge_lifecycle import KnowledgeLifecycleRepository
 from app.repositories.project import ProjectRepository
+from app.repositories.public_demo import PublicDemoRepository
 from app.repositories.publication import PublicationRepository
 from app.repositories.retrieval import RetrievalRepository
 from app.services.access_grant import AccessGrantService
@@ -58,6 +61,7 @@ from app.services.interview_workflow import InterviewWorkflowService
 from app.services.knowledge_document import KnowledgeDocumentService
 from app.services.knowledge_lifecycle import KnowledgeLifecycleService
 from app.services.project import ProjectService
+from app.services.public_demo import PublicDemoService
 from app.services.publication import PublicationService
 from app.services.retrieval import RetrievalService
 
@@ -79,6 +83,7 @@ def create_app(
     knowledge_lifecycle_service: KnowledgeLifecycleService | None = None,
     interview_service: InterviewService | None = None,
     interview_workflow_service: InterviewWorkflowService | None = None,
+    public_demo_service: PublicDemoService | None = None,
 ) -> FastAPI:
     """Build an application whose shared infrastructure is owned by its lifespan."""
     application_settings = settings or Settings()
@@ -135,6 +140,12 @@ def create_app(
                 recruiter_session_ttl_seconds=(application_settings.recruiter_session_ttl_seconds),
                 access_exchange_failure_limit=(application_settings.access_exchange_failure_limit),
                 dependency_timeout_seconds=application_settings.dependency_timeout_seconds,
+            )
+        public_demo_management_service = public_demo_service
+        if public_demo_management_service is None:
+            public_demo_management_service = PublicDemoService(
+                PublicDemoRepository(cast(DatabaseSessionProvider, database_connection)),
+                recruiter_access_service,
             )
         project_management_service = project_service
         if project_management_service is None:
@@ -315,6 +326,7 @@ def create_app(
             application.state.admin_auth_service = authentication_service
             application.state.admin_user_service = administrator_management_service
             application.state.access_grant_service = recruiter_access_service
+            application.state.public_demo_service = public_demo_management_service
             application.state.project_service = project_management_service
             application.state.knowledge_document_service = document_management_service
             application.state.ingestion_service = document_processing_service
@@ -336,11 +348,13 @@ def create_app(
     application.include_router(admin_auth_router)
     application.include_router(admin_users_router)
     application.include_router(admin_access_grants_router)
+    application.include_router(admin_public_demo_router)
     application.include_router(admin_documents_router)
     application.include_router(admin_ingestion_router)
     application.include_router(admin_projects_router)
     application.include_router(admin_publication_router)
     application.include_router(recruiter_access_router)
+    application.include_router(public_demo_router)
     application.include_router(interview_router)
     return application
 

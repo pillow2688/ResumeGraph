@@ -12,6 +12,7 @@ const navigation = [
   { label: "Profile 资料", to: "/admin/profile-documents" },
   { label: "Technical 资料", to: "/admin/technical-documents" },
   { label: "访问授权", to: "/admin/access-grants" },
+  { label: "Public Demo", to: "/admin/public-demo" },
   { label: "管理员", to: "/admin/users" },
 ];
 
@@ -34,32 +35,32 @@ export function Layout({ children }: LayoutProps) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-950">
-      <header className="border-b border-slate-200 bg-white/95 backdrop-blur">
+    <div className="min-h-screen bg-neutral-50 text-neutral-950">
+      <header className="sticky top-0 z-30 border-b border-black/5 bg-white/90 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-4 sm:px-8">
           <div className="flex items-center gap-3">
             <div
               aria-hidden="true"
-              className="grid size-10 place-items-center rounded-xl bg-slate-950 text-sm font-bold text-white shadow-sm"
+              className="grid size-10 place-items-center rounded-2xl bg-neutral-950 text-sm font-bold text-white"
             >
               RG
             </div>
             <div>
               <p className="text-sm font-semibold tracking-tight">ResumeGraph</p>
-              <p className="text-xs text-slate-500">Admin Console</p>
+              <p className="text-xs text-neutral-500">Admin Console</p>
             </div>
           </div>
           <nav
             aria-label="管理员导航"
-            className="flex items-center gap-1 rounded-xl bg-slate-100 p-1"
+            className="flex max-w-full items-center gap-1 overflow-x-auto rounded-2xl bg-neutral-100 p-1"
           >
             {navigation.map((item) => (
               <NavLink
                 className={({ isActive }) =>
-                  `rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                  `whitespace-nowrap rounded-xl px-3 py-2 text-sm font-semibold transition ${
                     isActive
-                      ? "bg-white text-slate-950 shadow-sm"
-                      : "text-slate-600 hover:text-slate-950"
+                      ? "bg-white text-neutral-950 shadow-sm"
+                      : "text-neutral-600 hover:text-neutral-950"
                   }`
                 }
                 key={item.to}
@@ -70,7 +71,7 @@ export function Layout({ children }: LayoutProps) {
             ))}
           </nav>
           <button
-            className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+            className="rounded-xl border border-neutral-300 px-3 py-2 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-60"
             disabled={isLoggingOut}
             onClick={() => void handleLogout()}
             type="button"
@@ -89,7 +90,7 @@ export function Layout({ children }: LayoutProps) {
           </div>
         </div>
       ) : null}
-      <main className="mx-auto max-w-6xl px-5 py-8 sm:px-8 sm:py-12">{children}</main>
+      <main className="mx-auto max-w-6xl px-5 py-10 sm:px-8 sm:py-14">{children}</main>
     </div>
   );
 }

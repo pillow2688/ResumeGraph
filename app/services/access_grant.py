@@ -291,6 +291,33 @@ class AccessGrantService:
             await self._reject_exchange(client_host)
         assert record is not None
 
+        try:
+            result = await self._create_session_from_record(record)
+        except InvalidAccessGrantError:
+            await self._reject_exchange(client_host)
+
+        try:
+            await _await_dependency(
+                self._exchange_limiter.clear(client_host),
+                self._dependency_timeout_seconds,
+            )
+        except DependencyUnavailableError as error:
+            raise AccessControlUnavailableError from error
+
+        return result
+
+    async def validate_grant_for_session(self, grant_id: UUID) -> AccessGrantMetadata:
+        record = await self._load_session_eligible_grant(grant_id)
+        return _to_metadata(record)
+
+    async def create_session_from_grant(self, grant_id: UUID) -> RecruiterExchangeResult:
+        record = await self._load_session_eligible_grant(grant_id)
+        return await self._create_session_from_record(record)
+
+    async def _create_session_from_record(
+        self,
+        record: AccessGrantRecord,
+    ) -> RecruiterExchangeResult:
         session_token = generate_session_token()
         principal = _to_principal(record)
         try:
@@ -306,16 +333,8 @@ class AccessGrantService:
             )
         except DependencyUnavailableError as error:
             raise AccessControlUnavailableError from error
-        except RecruiterSessionLifetimeError:
-            await self._reject_exchange(client_host)
-
-        try:
-            await _await_dependency(
-                self._exchange_limiter.clear(client_host),
-                self._dependency_timeout_seconds,
-            )
-        except DependencyUnavailableError as error:
-            raise AccessControlUnavailableError from error
+        except RecruiterSessionLifetimeError as error:
+            raise InvalidAccessGrantError from error
 
         ttl_seconds = int((session.expires_at - session.created_at).total_seconds())
         return RecruiterExchangeResult(
@@ -324,6 +343,13 @@ class AccessGrantService:
             ttl_seconds=ttl_seconds,
             expires_at=session.expires_at,
         )
+
+    async def _load_session_eligible_grant(self, grant_id: UUID) -> AccessGrantRecord:
+        record = await self._load_grant(grant_id)
+        if not _is_currently_valid(record, self._clock()):
+            raise InvalidAccessGrantError
+        assert record is not None
+        return record
 
     async def get_current_recruiter(self, session_token: str) -> RecruiterPrincipal:
         return await self._get_current_recruiter(

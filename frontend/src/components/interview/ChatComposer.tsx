@@ -39,9 +39,12 @@ export function ChatComposer({
   }
 
   return (
-    <div className="sticky bottom-0 z-20 border-t border-slate-200 bg-stone-50/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:px-6">
+    <div
+      className="sticky bottom-0 z-20 shrink-0 border-t border-neutral-200 bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:px-6"
+      data-testid="chat-composer"
+    >
       <form
-        className="mx-auto max-w-5xl rounded-2xl border border-slate-300 bg-white p-2 shadow-[0_-8px_30px_rgba(15,23,42,0.06)] focus-within:border-cyan-700 focus-within:ring-4 focus-within:ring-cyan-100"
+        className="mx-auto max-w-5xl rounded-3xl border border-neutral-300 bg-white p-2 shadow-[0_-8px_30px_rgba(0,0,0,0.035)] focus-within:border-neutral-500 focus-within:ring-4 focus-within:ring-neutral-100"
         onSubmit={submit}
       >
         <label className="sr-only" htmlFor="interview-question">

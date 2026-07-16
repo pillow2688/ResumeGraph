@@ -21,19 +21,19 @@ function grantStatus(grant: AccessGrant): { label: string; className: string } {
     return { label: "已撤销", className: "bg-slate-100 text-slate-600" };
   }
   if (new Date(grant.expires_at).getTime() <= Date.now()) {
-    return { label: "已过期", className: "bg-amber-50 text-amber-800" };
+    return { label: "已过期", className: "bg-neutral-100 text-neutral-600" };
   }
   if (grant.request_count >= grant.max_requests) {
-    return { label: "已用尽", className: "bg-amber-50 text-amber-800" };
+    return { label: "已用尽", className: "bg-neutral-100 text-neutral-600" };
   }
-  return { label: "有效", className: "bg-emerald-50 text-emerald-700" };
+  return { label: "有效", className: "bg-neutral-950 text-white" };
 }
 
 export function AccessGrantCard({ grant, onRevoke }: AccessGrantCardProps) {
   const status = grantStatus(grant);
 
   return (
-    <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <article className="rounded-3xl border border-black/5 bg-white p-6 shadow-[0_10px_35px_rgba(0,0,0,0.035)]">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold tracking-tight">{grant.name}</h2>
@@ -85,4 +85,3 @@ export function AccessGrantCard({ grant, onRevoke }: AccessGrantCardProps) {
     </article>
   );
 }
-

@@ -144,6 +144,33 @@ class AccessControlUnavailableResponseError(AppError):
         )
 
 
+class PublicDemoUnavailableResponseError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=409,
+            code="public_demo_unavailable",
+            message="AI Interview 尚未开放",
+        )
+
+
+class InvalidPublicDemoConfigResponseError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=422,
+            code="invalid_public_demo_config",
+            message="The Public Demo configuration is invalid.",
+        )
+
+
+class PublicDemoServiceUnavailableResponseError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=503,
+            code="service_unavailable",
+            message="Public Demo is temporarily unavailable.",
+        )
+
+
 class InterviewProjectScopeResponseError(AppError):
     def __init__(self) -> None:
         super().__init__(

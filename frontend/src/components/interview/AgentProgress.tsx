@@ -11,7 +11,7 @@ export function AgentProgress({ events, completed }: AgentProgressProps) {
   if (!current) {
     return completed ? null : (
       <div className="flex items-center gap-2 text-sm text-slate-500">
-        <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-cyan-600" />
+        <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-neutral-600" />
         正在生成最终回答
       </div>
     );
@@ -31,7 +31,7 @@ export function AgentProgress({ events, completed }: AgentProgressProps) {
   return (
     <div aria-live="polite" className="space-y-2">
       <div className="flex items-center gap-2 text-sm text-slate-600">
-        <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-cyan-600" />
+        <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-neutral-600" />
         {current.public_message}
       </div>
       <div
@@ -40,7 +40,7 @@ export function AgentProgress({ events, completed }: AgentProgressProps) {
         role="progressbar"
       >
         <div
-          className="h-full rounded-full bg-cyan-700 transition-[width]"
+          className="h-full rounded-full bg-neutral-800 transition-[width]"
           style={{ width: `${current.progress}%` }}
         />
       </div>

@@ -52,7 +52,8 @@ export function ChatMessageList({
     <div className="relative min-h-0 flex-1">
       <div
         aria-label="面试消息列表"
-        className="h-full overflow-y-auto px-4 py-6 sm:px-6"
+        className="h-full overflow-y-auto scroll-smooth px-4 py-6 sm:px-6"
+        data-testid="chat-scroll-region"
         onScroll={handleScroll}
         ref={containerRef}
         role="log"
@@ -72,7 +73,7 @@ export function ChatMessageList({
       </div>
       {!followLatest ? (
         <button
-          className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold shadow-lg"
+          className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border border-neutral-200 bg-white px-3 py-2 text-xs font-semibold shadow-lg"
           onClick={scrollToBottom}
           type="button"
         >

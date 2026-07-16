@@ -10,6 +10,7 @@ import {
 import { getRecruiterSession, logoutRecruiter } from "../api/recruiterAccess";
 import { ChatComposer } from "../components/interview/ChatComposer";
 import { ChatMessageList } from "../components/interview/ChatMessageList";
+import { ChatWindow } from "../components/interview/ChatWindow";
 import { CitationDrawer } from "../components/interview/CitationDrawer";
 import { ConversationSidebar } from "../components/interview/ConversationSidebar";
 import { InterviewHeader } from "../components/interview/InterviewHeader";
@@ -255,6 +256,19 @@ export function Interview() {
         />
       }
     >
+      <ChatWindow
+        composer={
+          <ChatComposer
+            disabled={isLoading || !conversationId || remainingRequests <= 0}
+            isSubmitting={isSubmitting}
+            onChange={setQuestion}
+            onSend={() => void sendQuestion()}
+            onStop={() => abortRef.current?.abort()}
+            projectNames={projectNames}
+            value={question}
+          />
+        }
+      >
       {pageError ? (
         <div
           className="mx-auto mt-3 w-[calc(100%-2rem)] max-w-5xl rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900"
@@ -287,15 +301,7 @@ export function Interview() {
         </>
       )}
 
-      <ChatComposer
-        disabled={isLoading || !conversationId || remainingRequests <= 0}
-        isSubmitting={isSubmitting}
-        onChange={setQuestion}
-        onSend={() => void sendQuestion()}
-        onStop={() => abortRef.current?.abort()}
-        projectNames={projectNames}
-        value={question}
-      />
+      </ChatWindow>
     </InterviewLayout>
   );
 }

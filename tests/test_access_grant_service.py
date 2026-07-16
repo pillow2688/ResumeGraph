@@ -359,6 +359,51 @@ def test_valid_access_token_creates_bounded_session_without_consuming_quota() ->
     assert limiter.cleared is True
 
 
+def test_valid_grant_id_can_be_validated_and_create_a_bounded_session() -> None:
+    record = make_record(expires_at=NOW + timedelta(minutes=30))
+    repository = FakeRepository([record])
+    store = FakeSessionStore()
+    limiter = FakeLimiter()
+    service = make_service(repository, store=store, limiter=limiter)
+
+    grant = asyncio.run(service.validate_grant_for_session(record.id))
+    result = asyncio.run(service.create_session_from_grant(record.id))
+
+    assert grant.id == record.id
+    assert grant.request_count == record.request_count
+    assert result.principal.grant_id == record.id
+    assert result.session_token == store.created_token
+    assert result.ttl_seconds == 1800
+    assert repository.records[record.id].request_count == record.request_count
+    assert limiter.cleared is False
+
+
+@pytest.mark.parametrize(
+    "record_overrides",
+    [
+        None,
+        {"expires_at": NOW},
+        {"revoked_at": NOW - timedelta(minutes=1)},
+        {"request_count": 100},
+        {"projects": ()},
+    ],
+)
+def test_grant_id_session_creation_rejects_every_invalid_grant_state(
+    record_overrides: dict[str, object] | None,
+) -> None:
+    service_module = load_service_module()
+    record = make_record()
+    records: list[AccessGrantRecord] = []
+    if record_overrides is not None:
+        records.append(replace(record, **record_overrides))
+    service = make_service(FakeRepository(records))
+
+    with pytest.raises(service_module.InvalidAccessGrantError):
+        asyncio.run(service.validate_grant_for_session(record.id))
+    with pytest.raises(service_module.InvalidAccessGrantError):
+        asyncio.run(service.create_session_from_grant(record.id))
+
+
 @pytest.mark.parametrize(
     "record_overrides",
     [

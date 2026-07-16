@@ -54,6 +54,10 @@ describe("Layout", () => {
       "href",
       "/admin/technical-documents",
     );
+    expect(screen.getByRole("link", { name: "Public Demo" })).toHaveAttribute(
+      "href",
+      "/admin/public-demo",
+    );
     await user.click(screen.getByRole("button", { name: "退出登录" }));
 
     expect(logoutAdminMock).toHaveBeenCalledOnce();

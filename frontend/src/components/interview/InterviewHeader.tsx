@@ -14,7 +14,7 @@ export function InterviewHeader({
   onNewConversation,
 }: InterviewHeaderProps) {
   return (
-    <header className="z-20 border-b border-slate-200 bg-stone-50/95 px-4 py-3 backdrop-blur sm:px-6">
+    <header className="z-20 shrink-0 border-b border-neutral-200 bg-white/90 px-4 py-3 backdrop-blur sm:px-6">
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
           <button
@@ -28,7 +28,7 @@ export function InterviewHeader({
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h1 className="truncate text-base font-semibold sm:text-lg">AI 面试助手</h1>
-              <span className="hidden rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 sm:inline">
+              <span className="hidden rounded-full border border-neutral-200 bg-neutral-100 px-2 py-0.5 text-[11px] font-semibold text-neutral-700 sm:inline">
                 {conversationReady ? "对话可用" : "正在连接"}
               </span>
             </div>

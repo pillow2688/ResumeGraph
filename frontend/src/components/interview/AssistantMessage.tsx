@@ -5,6 +5,7 @@ import type { InterviewPublicCitation } from "../../types/interview";
 import type { InterviewChatTurn } from "./types";
 import { AgentProgress } from "./AgentProgress";
 import { CitationList } from "./CitationList";
+import { MessageBubble } from "./MessageBubble";
 
 const statusMessage = {
   answered: null,
@@ -34,15 +35,7 @@ export function AssistantMessage({
   }
 
   return (
-    <article
-      aria-label="AI 候选人回答"
-      className="mr-auto flex w-full max-w-3xl gap-3"
-      data-side="left"
-    >
-      <div className="mt-1 grid size-9 shrink-0 place-items-center rounded-xl bg-slate-950 text-xs font-bold text-white">
-        AI
-      </div>
-      <div className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+    <MessageBubble label="AI 候选人回答" side="left">
         <p className="mb-3 text-xs font-semibold text-slate-500">AI 候选人</p>
         {!response && !turn.error && !turn.stopped ? (
           <AgentProgress completed={false} events={turn.events} />
@@ -94,7 +87,6 @@ export function AssistantMessage({
             ) : null}
           </div>
         ) : null}
-      </div>
-    </article>
+    </MessageBubble>
   );
 }

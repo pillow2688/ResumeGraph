@@ -177,7 +177,7 @@ describe("Interview chat", () => {
     const assistant = await screen.findByText(/我目前使用/);
     expect(assistant.closest("article")).toHaveAttribute("data-side", "left");
     expect(screen.getByText("Redis").tagName).toBe("STRONG");
-    expect(screen.getByText("TTL 随机化")).toBeInTheDocument();
+    expect(screen.getAllByText("TTL 随机化").length).toBeGreaterThan(0);
     expect(
       screen.getByText("以下回答包含当前实现情况和后续可考虑的方案。"),
     ).toBeInTheDocument();
@@ -185,6 +185,8 @@ describe("Interview chat", () => {
     expect(screen.getByText("项目事实")).toBeInTheDocument();
     expect(screen.getByText("技术原理")).toBeInTheDocument();
     expect(screen.getByText("后续方案")).toBeInTheDocument();
+    expect(screen.getAllByText("Source")).toHaveLength(3);
+    expect(screen.getAllByText("Chunk")).toHaveLength(3);
     expect(screen.getByText("当前技术主题：Redis")).toBeInTheDocument();
     expect(screen.getByText("当前对话：第 1 轮")).toBeInTheDocument();
     expect(screen.getByText("剩余 19 次")).toBeInTheDocument();
@@ -195,6 +197,27 @@ describe("Interview chat", () => {
     expect(within(drawer).getByText(/随机化 TTL/)).toBeInTheDocument();
     expect(within(drawer).queryByText(/chunk_id|Embedding|SQL/)).not.toBeInTheDocument();
   });
+
+  it("keeps more than ten turns in an independently scrollable message area", async () => {
+    const scrollTo = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+      configurable: true,
+      value: scrollTo,
+    });
+    renderInterview();
+
+    for (let turn = 1; turn <= 11; turn += 1) {
+      await typeAndSend(`第 ${turn} 轮问题`);
+      await waitFor(() => expect(streamMock).toHaveBeenCalledTimes(turn));
+      await screen.findByText(`第 ${turn} 轮问题`);
+    }
+
+    const messageArea = screen.getByTestId("chat-scroll-region");
+    expect(messageArea).toHaveClass("overflow-y-auto");
+    expect(screen.getAllByLabelText("面试官消息")).toHaveLength(11);
+    expect(screen.getByTestId("chat-composer")).toHaveClass("shrink-0");
+    expect(scrollTo).toHaveBeenCalled();
+  }, 20_000);
 
   it("uses Enter to send, Shift+Enter for a newline, and ignores IME composition", async () => {
     const user = userEvent.setup();

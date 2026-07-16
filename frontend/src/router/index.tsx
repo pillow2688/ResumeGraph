@@ -7,16 +7,22 @@ import { DocumentDetail } from "../pages/DocumentDetail";
 import { DocumentChunks } from "../pages/DocumentChunks";
 import { IngestionJob } from "../pages/IngestionJob";
 import { Interview } from "../pages/Interview";
+import { LandingPage } from "../pages/LandingPage";
 import { Portfolio } from "../pages/Portfolio";
 import { ProfileDocuments } from "../pages/ProfileDocuments";
 import { ProjectDocuments } from "../pages/ProjectDocuments";
 import { Projects } from "../pages/Projects";
+import { PublicDemoSetting } from "../pages/PublicDemoSetting";
 import { RecruiterAccess } from "../pages/RecruiterAccess";
 import { TechnicalDocuments } from "../pages/TechnicalDocuments";
 
 export const router = createBrowserRouter([
   {
     path: "/",
+    element: <LandingPage />,
+  },
+  {
+    path: "/admin",
     element: <Navigate replace to="/admin/login" />,
   },
   {
@@ -60,6 +66,10 @@ export const router = createBrowserRouter([
     element: <AccessGrants />,
   },
   {
+    path: "/admin/public-demo",
+    element: <PublicDemoSetting />,
+  },
+  {
     path: "/access",
     element: <RecruiterAccess />,
   },
@@ -73,6 +83,6 @@ export const router = createBrowserRouter([
   },
   {
     path: "*",
-    element: <Navigate replace to="/admin/login" />,
+    element: <Navigate replace to="/" />,
   },
 ]);

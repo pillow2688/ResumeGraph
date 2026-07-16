@@ -45,7 +45,7 @@ export function ConversationSidebar({
       >
         <div className="flex items-center justify-between gap-3 px-2">
           <div className="flex items-center gap-3">
-            <div className="grid size-10 place-items-center rounded-xl bg-cyan-300 text-sm font-black text-slate-950">
+            <div className="grid size-10 place-items-center rounded-2xl bg-white text-sm font-black text-neutral-950">
               RG
             </div>
             <div>
@@ -98,7 +98,7 @@ export function ConversationSidebar({
                 <input
                   aria-label={project.name}
                   checked={selectedProjectIds.includes(project.id)}
-                  className="size-4 accent-cyan-300"
+                  className="size-4 accent-white"
                   disabled={disabled}
                   onChange={() => onProjectToggle(project.id)}
                   type="checkbox"

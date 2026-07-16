@@ -29,6 +29,7 @@ def test_phase_2_4_metadata_contains_only_the_requested_tables() -> None:
         "ingestion_jobs",
         "knowledge_documents",
         "projects",
+        "public_demo_config",
     }
 
 
@@ -54,6 +55,17 @@ def test_phase_2_4_metadata_contains_only_the_requested_tables() -> None:
                 "request_count",
                 "revoked_at",
                 "created_at",
+            },
+        ),
+        (
+            "PublicDemoConfig",
+            {
+                "id",
+                "candidate_name",
+                "default_access_grant_id",
+                "enabled",
+                "created_at",
+                "updated_at",
             },
         ),
         ("GrantProject", {"grant_id", "project_id"}),

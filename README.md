@@ -1,7 +1,13 @@
 # ResumeGraph
 
-This repository has completed the **Phase 4 multi-agent interview workflow** on top of the
-published Profile and Grant-scoped Project RAG baseline. An authorized Recruiter can use the
+This repository has completed the **Phase 4.5 Public Demo Experience** on top of the
+Phase 4 multi-agent interview workflow. The root path `/` is now a recruiter-facing product
+landing page. An administrator binds one existing Access Grant at `/admin/public-demo`; visitors
+can then create a normal Recruiter Session through a safe public POST and enter `/interview`
+without seeing a raw token, Grant ID, or project scope.
+
+The implementation preserves the published Profile and Grant-scoped Project RAG baseline. An
+authorized Recruiter can use the
 chat-style `/interview` page for a bounded multi-turn conversation. A LangGraph Supervisor routes
 questions to Profile, Project, and Technical specialists, then a Verification Agent checks factual
 and authorization boundaries before the response is returned through a normal API or public SSE
@@ -17,11 +23,32 @@ Compose stack passed acceptance. A real desktop and mobile browser run verified 
 Technical, and planned Evidence boundaries, public Agent progress, scoped Citations, quota, and
 immediate Conversation invalidation after Grant revocation.
 
-See the [Phase 4 plan](docs/PHASE4_PLAN.md), [Phase 4 summary](docs/PHASE4_SUMMARY.md),
+See the [Phase 4.5 summary](docs/PHASE4_5_SUMMARY.md),
+[Phase 4.5 status](docs/status/PHASE_4_5_STATUS.md),
+[Phase 4.5 learning notes](docs/learning/PHASE_4_5_LEARNING.md), and
+[Phase 4.5 architecture](docs/architecture/PHASE_4_5_ARCHITECTURE.md). The underlying Agent
+workflow remains documented in the [Phase 4 plan](docs/PHASE4_PLAN.md),
+[Phase 4 summary](docs/PHASE4_SUMMARY.md),
 [Phase 4 status](docs/status/PHASE_4_STATUS.md),
 [learning notes](docs/learning/PHASE_4_LEARNING.md), and
 [architecture](docs/architecture/PHASE_4_ARCHITECTURE.md). Phase 5 evaluation and advanced
 retrieval are not started.
+
+## Phase 4.5 Public Demo Experience
+
+The public flow is intentionally small and server-controlled:
+
+```text
+/ → GET public status → POST public Session → HttpOnly Recruiter Cookie → /interview
+```
+
+`public_demo_config` is a singleton (`id = 1`) that stores only the display name, existing Grant
+reference, and Enabled state. Grant validity and Session creation remain owned by
+`AccessGrantService`. The Interview page now keeps Header and Composer fixed around an independent
+scrolling message area, supports long histories, and renders citations as Source/Chunk cards.
+
+After applying the Migration, sign in at `/admin`, open `/admin/public-demo`, select an existing
+valid Access Grant, keep the candidate name (default UI value: `马腾飞`), and enable the Demo.
 
 ## Phase 4 multi-agent interview workflow
 

@@ -55,7 +55,12 @@ tested.
   [`docs/PHASE4_SUMMARY.md`](docs/PHASE4_SUMMARY.md). Technical Knowledge, five bounded Agents,
   LangGraph orchestration, Redis short-term Conversation, POST SSE, flexible boundary-aware
   answers, and the desktop/mobile chat UI are implemented and verified.
-- **Active checkpoint: Phase 4 completed; Phase 5 has not started.**
+- **Phase 4.5 — Public Demo Experience: completed in the development workspace.** See
+  [`docs/status/PHASE_4_5_STATUS.md`](docs/status/PHASE_4_5_STATUS.md) and
+  [`docs/PHASE4_5_SUMMARY.md`](docs/PHASE4_5_SUMMARY.md). The public Landing Page, singleton
+  Public Demo configuration, existing-Grant Session bridge, admin settings, and long-chat scroll
+  fix are implemented without changing the Phase 4 Agent/RAG boundary.
+- **Active checkpoint: Phase 4.5 completed; Phase 5 has not started.**
 
 See `docs/PHASE1_SUMMARY.md` for the verified Phase 1 implementation and validation details.
 
@@ -83,9 +88,12 @@ and its complete handoff is in [`docs/PHASE2_SUMMARY.md`](docs/PHASE2_SUMMARY.md
   Evidence. No permanent Conversation/Message tables exist.
 - Phase 4 includes public POST SSE progress and a chat-style `/interview` page. Public responses and
   events never expose prompts, private Agent state, complete Evidence, SQL, or chain of thought.
+- Phase 4.5 Public Demo selects one existing Access Grant server-side and creates the same Recruiter
+  Session used by the manual Access Token flow. Public responses never expose the Grant ID, raw
+  Token, project scope, Cookie contents, or administrator data.
 - Do not implement Phase 5 behavior early, including evaluation dashboards, Recall@K/MRR/NDCG,
   Hybrid Search, BM25, RRF, Reranker, HyDE, RAPTOR, CRAG, Self-RAG, or Web Search.
-- The Phase 4 status, learning, architecture, and summary documents are the current handoff.
+- The Phase 4.5 status, learning, architecture, and summary documents are the current handoff.
 - The user authorized the Phase 4 Git checkpoint on `main` and a matching
   `feature/phase4-multi-agent` branch. This does not authorize Push, Merge, Reset, Clean, or Rebase.
 - Current code, migrations, tests, and the latest subsection status records take precedence over

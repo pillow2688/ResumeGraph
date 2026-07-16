@@ -24,7 +24,7 @@ export function CitationDrawer({ citation, onClose }: CitationDrawerProps) {
       >
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-cyan-800">
+            <p className="text-xs font-semibold uppercase tracking-wider text-neutral-600">
               {citationTypeLabels[citation.knowledge_type]}
             </p>
             <h2 className="mt-1 text-xl font-semibold">引用详情</h2>
