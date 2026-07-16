@@ -104,6 +104,7 @@ class FakeKnowledgeDocumentRepository:
             id=document_id,
             project_id=project_id,
             project_name=project_name,
+            knowledge_status=str(kwargs["knowledge_status"]),
             title=str(kwargs["title"]),
             created_at=NOW,
             updated_at=NOW,
@@ -140,6 +141,33 @@ class FakeKnowledgeDocumentRepository:
         self.versions[document.id] = [version]
         return document
 
+    async def create_technical_document(self, **kwargs: object) -> KnowledgeDocumentRecord:
+        self._check()
+        self.last_create = kwargs
+        document_id = uuid4()
+        version = make_version(
+            document_id=document_id,
+            content=str(kwargs["raw_content"]),
+            source_type=str(kwargs["source_type"]),
+            original_filename=kwargs["original_filename"],
+        )
+        version = replace(version, content_hash=str(kwargs["content_hash"]))
+        document = KnowledgeDocumentRecord(
+            id=document_id,
+            project_id=None,
+            project_name=None,
+            document_scope="technical",
+            knowledge_status="general_knowledge",
+            title=str(kwargs["title"]),
+            created_at=NOW,
+            updated_at=NOW,
+            version_count=1,
+            latest_version=version,
+        )
+        self.documents[document.id] = document
+        self.versions[document.id] = [version]
+        return document
+
     async def list_documents(self, project_id: UUID) -> list[KnowledgeDocumentRecord] | None:
         self._check()
         if project_id not in self.projects:
@@ -154,6 +182,14 @@ class FakeKnowledgeDocumentRepository:
         self._check()
         return sorted(
             (item for item in self.documents.values() if item.document_scope == "profile"),
+            key=lambda item: (item.updated_at, str(item.id)),
+            reverse=True,
+        )
+
+    async def list_technical_documents(self) -> list[KnowledgeDocumentRecord]:
+        self._check()
+        return sorted(
+            (item for item in self.documents.values() if item.document_scope == "technical"),
             key=lambda item: (item.updated_at, str(item.id)),
             reverse=True,
         )
@@ -258,12 +294,56 @@ def test_pasted_markdown_creates_document_and_v1_with_hash() -> None:
     assert created.latest_version.content_size_bytes == len(b"# Design\n\nText")
     assert repository.last_create == {
         "project_id": project_id,
+        "knowledge_status": "implemented",
         "title": "Design notes",
         "source_type": "pasted_markdown",
         "original_filename": None,
         "raw_content": "# Design\n\nText",
         "content_hash": sha256(b"# Design\n\nText").hexdigest(),
     }
+
+
+def test_project_document_status_is_selected_by_administrator() -> None:
+    repository = FakeKnowledgeDocumentRepository()
+    project_id = uuid4()
+    repository.projects[project_id] = "ResumeGraph"
+    service = make_service(repository)
+
+    created = asyncio.run(
+        service.create_document_from_paste(
+            project_id,
+            title="Retrieval cache roadmap",
+            content="# Planned\n\nCache high-frequency retrieval results.",
+            knowledge_status="planned",
+        )
+    )
+
+    assert created.document_scope == "project"
+    assert created.knowledge_status == "planned"
+    assert repository.last_create is not None
+    assert repository.last_create["knowledge_status"] == "planned"
+
+
+def test_technical_documents_reuse_versions_without_a_project() -> None:
+    repository = FakeKnowledgeDocumentRepository()
+    service = make_service(repository)
+
+    created = asyncio.run(
+        service.create_technical_document_from_upload(
+            title="Redis cache avalanche",
+            filename="redis-avalanche.md",
+            content=b"# Redis\n\nRandomize TTL values.",
+        )
+    )
+    listed = asyncio.run(service.list_technical_documents())
+
+    assert [item.id for item in listed] == [created.id]
+    assert created.project_id is None
+    assert created.project is None
+    assert created.document_scope == "technical"
+    assert created.knowledge_status == "general_knowledge"
+    assert created.latest_version is not None
+    assert created.latest_version.original_filename == "redis-avalanche.md"
 
 
 def test_profile_documents_create_multiple_resumes_without_project() -> None:

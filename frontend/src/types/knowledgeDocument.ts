@@ -1,4 +1,7 @@
 export type DocumentSourceType = "pasted_markdown" | "markdown_file";
+export type DocumentScope = "profile" | "project" | "technical";
+export type KnowledgeStatus = "implemented" | "planned" | "general_knowledge";
+export type ProjectKnowledgeStatus = "implemented" | "planned";
 export type DocumentVersionStatus =
   | "draft"
   | "processing"
@@ -37,7 +40,8 @@ export interface DocumentVersion extends DocumentVersionSummary {
 export interface KnowledgeDocumentSummary {
   id: string;
   project_id: string | null;
-  document_scope?: "profile" | "project";
+  document_scope?: DocumentScope;
+  knowledge_status?: KnowledgeStatus;
   title: string;
   created_at: string;
   updated_at: string;
@@ -62,6 +66,11 @@ export interface KnowledgeDocument extends KnowledgeDocumentSummary {
 export interface CreateDocumentRequest {
   title: string;
   content: string;
+  knowledge_status?: KnowledgeStatus;
+}
+
+export interface TechnicalDocumentRequest extends CreateDocumentRequest {
+  knowledge_status: "general_knowledge";
 }
 
 export interface CreateDocumentVersionRequest {

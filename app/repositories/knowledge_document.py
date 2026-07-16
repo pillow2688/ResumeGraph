@@ -50,6 +50,7 @@ class KnowledgeDocumentRecord:
     current_published_version_id: UUID | None = None
     current_published_version_number: int | None = None
     document_scope: str = "project"
+    knowledge_status: str = "implemented"
     current_chunk_count: int = 0
     current_enabled_chunk_count: int = 0
     current_exact_duplicate_count: int = 0
@@ -194,6 +195,7 @@ def _record_from_row(row: object) -> KnowledgeDocumentRecord:
         current_published_version_id=document.current_published_version_id,
         current_published_version_number=current_published_version_number,
         document_scope=document.document_scope,
+        knowledge_status=document.knowledge_status,
         current_chunk_count=int(current_chunk_count or 0),
         current_enabled_chunk_count=int(current_enabled_chunk_count or 0),
         current_exact_duplicate_count=int(current_exact_duplicate_count or 0),
@@ -260,6 +262,7 @@ class KnowledgeDocumentRepository:
         original_filename: str | None,
         raw_content: str,
         content_hash: str,
+        knowledge_status: str = "implemented",
     ) -> KnowledgeDocumentRecord | None:
         try:
             async with self._database.session() as session:
@@ -274,6 +277,7 @@ class KnowledgeDocumentRepository:
                     id=uuid4(),
                     project_id=project_id,
                     document_scope="project",
+                    knowledge_status=knowledge_status,
                     title=title,
                 )
                 version = DocumentVersion(
@@ -303,6 +307,7 @@ class KnowledgeDocumentRepository:
                     latest_version=_to_version_record(version),
                     current_published_version_id=document.current_published_version_id,
                     document_scope=document.document_scope,
+                    knowledge_status=document.knowledge_status,
                 )
         except (SQLAlchemyError, OSError) as error:
             raise KnowledgeDocumentRepositoryUnavailableError from error
@@ -316,44 +321,34 @@ class KnowledgeDocumentRepository:
         raw_content: str,
         content_hash: str,
     ) -> KnowledgeDocumentRecord:
-        try:
-            async with self._database.session() as session:
-                document = KnowledgeDocument(
-                    id=uuid4(),
-                    project_id=None,
-                    document_scope="profile",
-                    title=title,
-                )
-                version = DocumentVersion(
-                    id=uuid4(),
-                    document_id=document.id,
-                    version_number=1,
-                    source_type=source_type,
-                    original_filename=original_filename,
-                    raw_content=raw_content,
-                    content_hash=content_hash,
-                    status="draft",
-                )
-                session.add(document)
-                session.add(version)
-                await session.flush()
-                await session.refresh(document)
-                await session.refresh(version)
-                await session.commit()
-                return KnowledgeDocumentRecord(
-                    id=document.id,
-                    project_id=None,
-                    project_name=None,
-                    title=document.title,
-                    created_at=document.created_at,
-                    updated_at=document.updated_at,
-                    version_count=1,
-                    latest_version=_to_version_record(version),
-                    current_published_version_id=None,
-                    document_scope="profile",
-                )
-        except (SQLAlchemyError, OSError) as error:
-            raise KnowledgeDocumentRepositoryUnavailableError from error
+        return await self._create_global_document(
+            document_scope="profile",
+            knowledge_status="implemented",
+            title=title,
+            source_type=source_type,
+            original_filename=original_filename,
+            raw_content=raw_content,
+            content_hash=content_hash,
+        )
+
+    async def create_technical_document(
+        self,
+        *,
+        title: str,
+        source_type: str,
+        original_filename: str | None,
+        raw_content: str,
+        content_hash: str,
+    ) -> KnowledgeDocumentRecord:
+        return await self._create_global_document(
+            document_scope="technical",
+            knowledge_status="general_knowledge",
+            title=title,
+            source_type=source_type,
+            original_filename=original_filename,
+            raw_content=raw_content,
+            content_hash=content_hash,
+        )
 
     async def list_documents(
         self,
@@ -381,6 +376,21 @@ class KnowledgeDocumentRepository:
                 result = await session.execute(
                     _document_select()
                     .where(KnowledgeDocument.document_scope == "profile")
+                    .order_by(KnowledgeDocument.updated_at.desc(), KnowledgeDocument.id.desc())
+                )
+                return [_record_from_row(row) for row in result.all()]
+        except (SQLAlchemyError, OSError) as error:
+            raise KnowledgeDocumentRepositoryUnavailableError from error
+
+    async def list_technical_documents(self) -> list[KnowledgeDocumentRecord]:
+        try:
+            async with self._database.session() as session:
+                result = await session.execute(
+                    _document_select()
+                    .where(
+                        KnowledgeDocument.document_scope == "technical",
+                        KnowledgeDocument.knowledge_status == "general_knowledge",
+                    )
                     .order_by(KnowledgeDocument.updated_at.desc(), KnowledgeDocument.id.desc())
                 )
                 return [_record_from_row(row) for row in result.all()]
@@ -544,3 +554,55 @@ class KnowledgeDocumentRepository:
         )
         row = result.one_or_none()
         return _record_from_row(row) if row is not None else None
+
+    async def _create_global_document(
+        self,
+        *,
+        document_scope: str,
+        knowledge_status: str,
+        title: str,
+        source_type: str,
+        original_filename: str | None,
+        raw_content: str,
+        content_hash: str,
+    ) -> KnowledgeDocumentRecord:
+        try:
+            async with self._database.session() as session:
+                document = KnowledgeDocument(
+                    id=uuid4(),
+                    project_id=None,
+                    document_scope=document_scope,
+                    knowledge_status=knowledge_status,
+                    title=title,
+                )
+                version = DocumentVersion(
+                    id=uuid4(),
+                    document_id=document.id,
+                    version_number=1,
+                    source_type=source_type,
+                    original_filename=original_filename,
+                    raw_content=raw_content,
+                    content_hash=content_hash,
+                    status="draft",
+                )
+                session.add(document)
+                session.add(version)
+                await session.flush()
+                await session.refresh(document)
+                await session.refresh(version)
+                await session.commit()
+                return KnowledgeDocumentRecord(
+                    id=document.id,
+                    project_id=None,
+                    project_name=None,
+                    title=document.title,
+                    created_at=document.created_at,
+                    updated_at=document.updated_at,
+                    version_count=1,
+                    latest_version=_to_version_record(version),
+                    current_published_version_id=None,
+                    document_scope=document.document_scope,
+                    knowledge_status=document.knowledge_status,
+                )
+        except (SQLAlchemyError, OSError) as error:
+            raise KnowledgeDocumentRepositoryUnavailableError from error

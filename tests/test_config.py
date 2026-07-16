@@ -145,6 +145,22 @@ def test_single_turn_rag_defaults_are_bounded_and_reuse_deepseek_configuration()
     assert settings.deepseek_quality_model == "deepseek-v4-pro"
 
 
+def test_phase_4_agent_and_conversation_defaults_are_finite() -> None:
+    settings = Settings(_env_file=None)
+
+    assert settings.agent_supervisor_max_specialist_calls == 4
+    assert settings.agent_profile_max_tool_calls == 2
+    assert settings.agent_project_max_tool_calls == 2
+    assert settings.agent_technical_max_tool_calls == 2
+    assert settings.agent_verification_max_runs == 2
+    assert settings.agent_max_answer_repairs == 1
+    assert settings.agent_max_graph_steps == 12
+    assert settings.agent_run_timeout_seconds == 90
+    assert settings.conversation_max_turns == 8
+    assert settings.conversation_ttl_seconds == 60 * 60
+    assert settings.conversation_summary_max_characters == 2_000
+
+
 def test_embedding_configuration_loads_unprefixed_environment_and_masks_key(monkeypatch) -> None:
     key = "fictional-openai-compatible-embedding-key"
     monkeypatch.setenv("EMBEDDING_PROVIDER_NAME", "custom-provider")
@@ -187,6 +203,17 @@ def test_embedding_configuration_loads_unprefixed_environment_and_masks_key(monk
         ("rag_max_context_characters", 0),
         ("rag_answer_timeout_seconds", 0),
         ("rag_answer_output_retries", 2),
+        ("agent_supervisor_max_specialist_calls", 0),
+        ("agent_profile_max_tool_calls", 3),
+        ("agent_project_max_tool_calls", 3),
+        ("agent_technical_max_tool_calls", 3),
+        ("agent_verification_max_runs", 3),
+        ("agent_max_answer_repairs", 2),
+        ("agent_max_graph_steps", 5),
+        ("agent_run_timeout_seconds", 0),
+        ("conversation_max_turns", 9),
+        ("conversation_ttl_seconds", 30),
+        ("conversation_summary_max_characters", 99),
     ],
 )
 def test_quality_provider_and_rule_bounds_are_validated(field: str, value: object) -> None:

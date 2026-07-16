@@ -45,15 +45,18 @@ def row(
     document_scope: str = "project",
     project_id: UUID | None = None,
     project_name: str | None = "ResumeGraph",
+    knowledge_status: str | None = None,
 ) -> dict[str, object]:
     return {
         "chunk_id": uuid4(),
         "content": "Redis 只保存短期 Session 和限流计数。",
         "content_hash": "a" * 64,
         "document_scope": document_scope,
+        "knowledge_status": knowledge_status
+        or ("general_knowledge" if document_scope == "technical" else "implemented"),
         "project_id": (
             None
-            if document_scope == "profile"
+            if document_scope in {"profile", "technical"}
             else project_id
             if project_id is not None
             else uuid4()
@@ -147,6 +150,63 @@ def test_search_maps_profile_evidence_without_fabricating_a_project() -> None:
     assert records[0].document_scope == "profile"
     assert records[0].project_id is None
     assert records[0].project_name is None
+    assert records[0].knowledge_status == "implemented"
+
+
+def test_technical_search_requires_a_valid_grant_but_never_project_authorization() -> None:
+    database = CaptureDatabase(
+        [row(document_scope="technical", project_id=None, project_name=None)]
+    )
+    repository = RetrievalRepository(database)
+
+    records = asyncio.run(
+        repository.search(
+            grant_id=uuid4(),
+            query_embedding=[0.1, 0.2, 0.3],
+            project_ids=[],
+            retrieval_scope="technical",
+            provider_name="zhipu",
+            model_name="embedding-3",
+            dimensions=3,
+            top_k=6,
+        )
+    )
+
+    assert records[0].document_scope == "technical"
+    assert records[0].knowledge_status == "general_knowledge"
+    assert records[0].project_id is None
+    compiled = database.session_instance.statements[0].compile(dialect=postgresql.dialect())
+    sql = " ".join(str(compiled).lower().split())
+    assert "access_grants" in sql
+    assert "grant_projects" not in sql
+    assert "knowledge_documents.document_scope" in sql
+    assert "knowledge_documents.knowledge_status" in sql
+
+
+def test_project_only_search_keeps_grant_intersection_and_planned_evidence() -> None:
+    project_id = uuid4()
+    database = CaptureDatabase([row(project_id=project_id, knowledge_status="planned")])
+    repository = RetrievalRepository(database)
+
+    records = asyncio.run(
+        repository.search(
+            grant_id=uuid4(),
+            query_embedding=[0.1, 0.2, 0.3],
+            project_ids=[project_id],
+            retrieval_scope="project",
+            provider_name="zhipu",
+            model_name="embedding-3",
+            dimensions=3,
+            top_k=6,
+        )
+    )
+
+    assert records[0].knowledge_status == "planned"
+    compiled = database.session_instance.statements[0].compile(dialect=postgresql.dialect())
+    sql = " ".join(str(compiled).lower().split())
+    assert "grant_projects" in sql
+    assert "knowledge_documents.project_id" in sql
+    assert "knowledge_documents.knowledge_status" in sql
 
 
 @pytest.mark.parametrize(
@@ -194,6 +254,25 @@ def test_search_rejects_empty_project_scope_instead_of_falling_back() -> None:
         )
 
     assert database.session_instance.statements == []
+
+
+def test_project_specialist_search_rejects_empty_scope_but_global_searches_do_not() -> None:
+    database = CaptureDatabase([])
+    repository = RetrievalRepository(database)
+
+    with pytest.raises(ValueError, match="project scope"):
+        asyncio.run(
+            repository.search(
+                grant_id=uuid4(),
+                query_embedding=[0.1, 0.2, 0.3],
+                project_ids=[],
+                retrieval_scope="project",
+                provider_name="zhipu",
+                model_name="embedding-3",
+                dimensions=3,
+                top_k=5,
+            )
+        )
 
 
 def test_search_maps_only_public_evidence_fields_and_preserves_sql_order() -> None:

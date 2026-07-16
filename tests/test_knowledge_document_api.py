@@ -107,24 +107,41 @@ class FakeDocumentService:
             raise self.failure
 
     async def create_document_from_paste(
-        self, project_id: UUID, *, title: str, content: str
+        self, project_id: UUID, *, title: str, content: str, knowledge_status: str
     ) -> KnowledgeDocumentDetail:
         self._check()
         self.last_call = (
             "create_paste",
-            {"project_id": project_id, "title": title, "content": content},
+            {
+                "project_id": project_id,
+                "title": title,
+                "content": content,
+                "knowledge_status": knowledge_status,
+            },
         )
-        return document_detail()
+        return document_detail().model_copy(update={"knowledge_status": knowledge_status})
 
     async def create_document_from_upload(
-        self, project_id: UUID, *, title: str, filename: str, content: bytes
+        self,
+        project_id: UUID,
+        *,
+        title: str,
+        filename: str,
+        content: bytes,
+        knowledge_status: str,
     ) -> KnowledgeDocumentDetail:
         self._check()
         self.last_call = (
             "create_upload",
-            {"project_id": project_id, "title": title, "filename": filename, "content": content},
+            {
+                "project_id": project_id,
+                "title": title,
+                "filename": filename,
+                "content": content,
+                "knowledge_status": knowledge_status,
+            },
         )
-        return document_detail()
+        return document_detail().model_copy(update={"knowledge_status": knowledge_status})
 
     async def list_documents(self, project_id: UUID) -> list[KnowledgeDocumentSummary]:
         self._check()
@@ -165,6 +182,50 @@ class FakeDocumentService:
                     "current_exact_duplicate_count": 1,
                     "current_hard_block_count": 1,
                     "current_embedding_count": 3,
+                }
+            )
+        ]
+
+    async def create_technical_document_from_paste(
+        self, *, title: str, content: str
+    ) -> KnowledgeDocumentDetail:
+        self._check()
+        self.last_call = ("technical_paste", {"title": title, "content": content})
+        return document_detail().model_copy(
+            update={
+                "project_id": None,
+                "document_scope": "technical",
+                "knowledge_status": "general_knowledge",
+                "project": None,
+            }
+        )
+
+    async def create_technical_document_from_upload(
+        self, *, title: str, filename: str, content: bytes
+    ) -> KnowledgeDocumentDetail:
+        self._check()
+        self.last_call = (
+            "technical_upload",
+            {"title": title, "filename": filename, "content": content},
+        )
+        return document_detail().model_copy(
+            update={
+                "project_id": None,
+                "document_scope": "technical",
+                "knowledge_status": "general_knowledge",
+                "project": None,
+            }
+        )
+
+    async def list_technical_documents(self) -> list[KnowledgeDocumentSummary]:
+        self._check()
+        self.last_call = ("technical_list", {})
+        return [
+            document_summary().model_copy(
+                update={
+                    "project_id": None,
+                    "document_scope": "technical",
+                    "knowledge_status": "general_knowledge",
                 }
             )
         ]
@@ -274,6 +335,18 @@ def authenticate(client: TestClient, settings: Settings) -> None:
             {"json": {"title": "Resume", "content": "# fictional"}},
         ),
         ("get", "/api/v1/admin/profile-documents", {}),
+        (
+            "post",
+            "/api/v1/admin/technical-documents",
+            {
+                "json": {
+                    "title": "Redis",
+                    "content": "# Redis",
+                    "knowledge_status": "general_knowledge",
+                }
+            },
+        ),
+        ("get", "/api/v1/admin/technical-documents", {}),
     ],
 )
 def test_all_document_routes_require_admin_and_recruiter_cookie_is_not_admin(
@@ -302,11 +375,15 @@ def test_admin_can_create_documents_from_paste_and_upload_with_201() -> None:
         authenticate(client, settings)
         pasted = client.post(
             f"/api/v1/admin/projects/{PROJECT_ID}/documents",
-            json={"title": "Design", "content": "# v1"},
+            json={
+                "title": "Design",
+                "content": "# v1",
+                "knowledge_status": "planned",
+            },
         )
         uploaded = client.post(
             f"/api/v1/admin/projects/{PROJECT_ID}/documents/upload",
-            data={"title": "Upload"},
+            data={"title": "Upload", "knowledge_status": "implemented"},
             files={"file": ("notes.md", b"# uploaded", "text/plain")},
         )
 
@@ -321,8 +398,66 @@ def test_admin_can_create_documents_from_paste_and_upload_with_201() -> None:
             "title": "Upload",
             "filename": "notes.md",
             "content": b"# uploaded",
+            "knowledge_status": "implemented",
         },
     )
+    assert pasted.json()["knowledge_status"] == "planned"
+
+
+def test_admin_can_create_upload_and_list_technical_documents() -> None:
+    client, service, settings = make_client()
+
+    with client:
+        authenticate(client, settings)
+        pasted = client.post(
+            "/api/v1/admin/technical-documents",
+            json={
+                "title": "Redis cache avalanche",
+                "content": "# Redis",
+                "knowledge_status": "general_knowledge",
+            },
+        )
+        uploaded = client.post(
+            "/api/v1/admin/technical-documents/upload",
+            data={"title": "pgvector", "knowledge_status": "general_knowledge"},
+            files={"file": ("pgvector.md", b"# pgvector")},
+        )
+        listed = client.get("/api/v1/admin/technical-documents")
+
+    assert pasted.status_code == 201
+    assert pasted.json()["document_scope"] == "technical"
+    assert pasted.json()["knowledge_status"] == "general_knowledge"
+    assert pasted.json()["project_id"] is None
+    assert uploaded.status_code == 201
+    assert listed.status_code == 200
+    assert listed.json()[0]["document_scope"] == "technical"
+    assert service.last_call == ("technical_list", {})
+
+
+def test_technical_endpoint_rejects_project_or_model_inferred_status() -> None:
+    client, _service, settings = make_client()
+
+    with client:
+        authenticate(client, settings)
+        wrong_status = client.post(
+            "/api/v1/admin/technical-documents",
+            json={
+                "title": "Redis",
+                "content": "# Redis",
+                "knowledge_status": "implemented",
+            },
+        )
+        unknown_status = client.post(
+            "/api/v1/admin/technical-documents",
+            json={
+                "title": "Redis",
+                "content": "# Redis",
+                "knowledge_status": "model_inferred",
+            },
+        )
+
+    assert wrong_status.status_code == 422
+    assert unknown_status.status_code == 422
 
 
 def test_admin_can_create_upload_and_list_multiple_profile_documents() -> None:

@@ -32,6 +32,7 @@ from app.infrastructure.embedding import (
 )
 from app.infrastructure.failure_limiter import FailureRateLimiter
 from app.infrastructure.health import HealthDependency
+from app.infrastructure.interview_conversation import InterviewConversationStore
 from app.infrastructure.job_queue import ArqJobQueue
 from app.infrastructure.recruiter_session import RecruiterSessionStore
 from app.infrastructure.redis import RedisConnection, RedisOperations
@@ -53,6 +54,7 @@ from app.services.deduplication import DeduplicationService
 from app.services.indexing import IndexingService
 from app.services.ingestion import IngestionService
 from app.services.interview import InterviewService
+from app.services.interview_workflow import InterviewWorkflowService
 from app.services.knowledge_document import KnowledgeDocumentService
 from app.services.knowledge_lifecycle import KnowledgeLifecycleService
 from app.services.project import ProjectService
@@ -76,6 +78,7 @@ def create_app(
     deduplication_service: DeduplicationService | None = None,
     knowledge_lifecycle_service: KnowledgeLifecycleService | None = None,
     interview_service: InterviewService | None = None,
+    interview_workflow_service: InterviewWorkflowService | None = None,
 ) -> FastAPI:
     """Build an application whose shared infrastructure is owned by its lifespan."""
     application_settings = settings or Settings()
@@ -222,8 +225,12 @@ def create_app(
             )
 
         interview_answering_service = interview_service
+        multi_agent_interview_service = interview_workflow_service
         chat_provider_to_close: OpenAICompatibleChatProvider | None = None
-        if interview_answering_service is None:
+        runtime_chat_provider: ChatProvider | None = None
+        runtime_retrieval_service: RetrievalService | None = None
+        runtime_quota_repository: AccessGrantRepository | None = None
+        if interview_answering_service is None or multi_agent_interview_service is None:
             if embedding_provider is None:
                 if application_settings.embedding_api_key.get_secret_value():
                     embedding_provider = OpenAICompatibleEmbeddingProvider(
@@ -244,7 +251,6 @@ def create_app(
                         model_name=application_settings.embedding_model,
                         dimensions=application_settings.embedding_dimensions,
                     )
-            chat_provider: ChatProvider
             if application_settings.deepseek_api_key.get_secret_value():
                 configured_chat_provider = OpenAICompatibleChatProvider(
                     provider_name="deepseek",
@@ -253,28 +259,45 @@ def create_app(
                     model_name=application_settings.deepseek_quality_model,
                     timeout_seconds=application_settings.rag_answer_timeout_seconds,
                 )
-                chat_provider = configured_chat_provider
+                runtime_chat_provider = configured_chat_provider
                 chat_provider_to_close = configured_chat_provider
             else:
-                chat_provider = UnconfiguredChatProvider(
+                runtime_chat_provider = UnconfiguredChatProvider(
                     provider_name="deepseek",
                     model_name=application_settings.deepseek_quality_model,
                 )
-            interview_answering_service = InterviewService(
-                AccessGrantRepository(cast(DatabaseSessionProvider, database_connection)),
-                RetrievalService(
-                    RetrievalRepository(cast(DatabaseSessionProvider, database_connection)),
-                    embedding_provider,
-                    top_k=application_settings.rag_top_k,
-                    max_context_characters=(application_settings.rag_max_context_characters),
-                    dependency_timeout_seconds=max(
-                        application_settings.embedding_timeout_seconds,
-                        application_settings.dependency_timeout_seconds,
-                    ),
+            runtime_quota_repository = AccessGrantRepository(
+                cast(DatabaseSessionProvider, database_connection)
+            )
+            runtime_retrieval_service = RetrievalService(
+                RetrievalRepository(cast(DatabaseSessionProvider, database_connection)),
+                embedding_provider,
+                top_k=application_settings.rag_top_k,
+                max_context_characters=application_settings.rag_max_context_characters,
+                dependency_timeout_seconds=max(
+                    application_settings.embedding_timeout_seconds,
+                    application_settings.dependency_timeout_seconds,
                 ),
-                chat_provider,
+            )
+
+        if interview_answering_service is None:
+            interview_answering_service = InterviewService(
+                cast(AccessGrantRepository, runtime_quota_repository),
+                cast(RetrievalService, runtime_retrieval_service),
+                cast(ChatProvider, runtime_chat_provider),
                 output_retry_count=application_settings.rag_answer_output_retries,
                 dependency_timeout_seconds=application_settings.rag_answer_timeout_seconds,
+            )
+        if multi_agent_interview_service is None:
+            multi_agent_interview_service = InterviewWorkflowService(
+                cast(AccessGrantRepository, runtime_quota_repository),
+                InterviewConversationStore(
+                    cast(RedisOperations, redis_connection),
+                    max_turns=application_settings.conversation_max_turns,
+                ),
+                retrieval_service=cast(RetrievalService, runtime_retrieval_service),
+                chat_provider=cast(ChatProvider, runtime_chat_provider),
+                settings=application_settings,
             )
 
         async with AsyncExitStack() as stack:
@@ -300,6 +323,7 @@ def create_app(
             application.state.deduplication_service = knowledge_deduplication_service
             application.state.knowledge_lifecycle_service = lifecycle_management_service
             application.state.interview_service = interview_answering_service
+            application.state.interview_workflow_service = multi_agent_interview_service
             yield
 
     application = FastAPI(

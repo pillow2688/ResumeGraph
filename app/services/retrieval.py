@@ -4,7 +4,20 @@ from typing import Literal, Protocol
 from uuid import UUID
 
 from app.infrastructure.embedding import EmbeddingProvider, EmbeddingProviderError
-from app.repositories.retrieval import RetrievalRecord, RetrievalRepositoryUnavailableError
+from app.repositories.retrieval import (
+    DocumentScope,
+    KnowledgeStatus,
+    RetrievalRecord,
+    RetrievalRepositoryUnavailableError,
+    RetrievalScope,
+)
+
+KnowledgeType = Literal[
+    "profile_fact",
+    "project_fact",
+    "technical_knowledge",
+    "planned_solution",
+]
 
 
 class RetrievalRepositoryBackend(Protocol):
@@ -18,6 +31,7 @@ class RetrievalRepositoryBackend(Protocol):
         model_name: str,
         dimensions: int,
         top_k: int,
+        retrieval_scope: RetrievalScope = "interview",
     ) -> list[RetrievalRecord]: ...
 
     async def revalidate(
@@ -29,6 +43,7 @@ class RetrievalRepositoryBackend(Protocol):
         provider_name: str,
         model_name: str,
         dimensions: int,
+        retrieval_scope: RetrievalScope = "interview",
     ) -> set[UUID]: ...
 
 
@@ -38,7 +53,7 @@ class Evidence:
     chunk_id: UUID
     content: str
     content_hash: str
-    document_scope: Literal["profile", "project"]
+    document_scope: DocumentScope
     project_id: UUID | None
     project_name: str | None
     document_id: UUID
@@ -46,6 +61,8 @@ class Evidence:
     version_number: int
     heading_path: tuple[str, ...]
     distance: float
+    knowledge_status: KnowledgeStatus = "implemented"
+    knowledge_type: KnowledgeType = "project_fact"
 
 
 class EmptyProjectScopeError(Exception):
@@ -101,6 +118,63 @@ class RetrievalService:
         grant_id: UUID,
         project_ids: list[UUID],
     ) -> list[Evidence]:
+        return await self._retrieve(
+            query=query,
+            grant_id=grant_id,
+            project_ids=project_ids,
+            retrieval_scope="interview",
+        )
+
+    async def search_profile_knowledge(
+        self,
+        *,
+        query: str,
+        grant_id: UUID,
+    ) -> list[Evidence]:
+        return await self._retrieve(
+            query=query,
+            grant_id=grant_id,
+            project_ids=[],
+            retrieval_scope="profile",
+        )
+
+    async def search_project_knowledge(
+        self,
+        *,
+        query: str,
+        grant_id: UUID,
+        project_ids: list[UUID],
+    ) -> list[Evidence]:
+        if not project_ids:
+            raise EmptyProjectScopeError
+        return await self._retrieve(
+            query=query,
+            grant_id=grant_id,
+            project_ids=project_ids,
+            retrieval_scope="project",
+        )
+
+    async def search_technical_knowledge(
+        self,
+        *,
+        query: str,
+        grant_id: UUID,
+    ) -> list[Evidence]:
+        return await self._retrieve(
+            query=query,
+            grant_id=grant_id,
+            project_ids=[],
+            retrieval_scope="technical",
+        )
+
+    async def _retrieve(
+        self,
+        *,
+        query: str,
+        grant_id: UUID,
+        project_ids: list[UUID],
+        retrieval_scope: RetrievalScope,
+    ) -> list[Evidence]:
         if not query.strip():
             raise ValueError("Retrieval query cannot be empty.")
         try:
@@ -117,6 +191,7 @@ class RetrievalService:
                     model_name=self._embedding_provider.model_name,
                     dimensions=self._embedding_provider.dimensions,
                     top_k=self._top_k,
+                    retrieval_scope=retrieval_scope,
                 ),
                 timeout=self._dependency_timeout_seconds,
             )
@@ -127,6 +202,8 @@ class RetrievalService:
         seen_hashes: set[str] = set()
         used_characters = 0
         for record in records:
+            if not self._record_matches_scope(record, retrieval_scope):
+                continue
             if record.content_hash in seen_hashes:
                 continue
             next_size = used_characters + len(record.content)
@@ -148,6 +225,8 @@ class RetrievalService:
                     version_number=record.version_number,
                     heading_path=record.heading_path,
                     distance=record.distance,
+                    knowledge_status=record.knowledge_status,
+                    knowledge_type=self._knowledge_type(record),
                 )
             )
         return evidence
@@ -170,9 +249,44 @@ class RetrievalService:
                     provider_name=self._embedding_provider.provider_name,
                     model_name=self._embedding_provider.model_name,
                     dimensions=self._embedding_provider.dimensions,
+                    retrieval_scope=self._revalidation_scope(evidence),
                 ),
                 timeout=self._dependency_timeout_seconds,
             )
         except (TimeoutError, RetrievalRepositoryUnavailableError) as error:
             raise RetrievalUnavailableError from error
         return {item.citation_handle for item in evidence if item.chunk_id in valid_chunk_ids}
+
+    @staticmethod
+    def _knowledge_type(record: RetrievalRecord) -> KnowledgeType:
+        mapping: dict[tuple[DocumentScope, KnowledgeStatus], KnowledgeType] = {
+            ("profile", "implemented"): "profile_fact",
+            ("project", "implemented"): "project_fact",
+            ("project", "planned"): "planned_solution",
+            ("technical", "general_knowledge"): "technical_knowledge",
+        }
+        try:
+            return mapping[(record.document_scope, record.knowledge_status)]
+        except KeyError as error:
+            raise RetrievalUnavailableError from error
+
+    @staticmethod
+    def _record_matches_scope(record: RetrievalRecord, retrieval_scope: RetrievalScope) -> bool:
+        if retrieval_scope == "interview":
+            return record.document_scope in {"profile", "project"}
+        if retrieval_scope == "all":
+            return True
+        return record.document_scope == retrieval_scope
+
+    @staticmethod
+    def _revalidation_scope(evidence: list[Evidence]) -> RetrievalScope:
+        scopes = {item.document_scope for item in evidence}
+        if scopes == {"profile"}:
+            return "profile"
+        if scopes == {"project"}:
+            return "project"
+        if scopes == {"technical"}:
+            return "technical"
+        if scopes <= {"profile", "project"}:
+            return "interview"
+        return "all"

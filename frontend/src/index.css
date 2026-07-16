@@ -33,3 +33,65 @@ button {
 button:disabled {
   cursor: default;
 }
+
+.interview-markdown > * + * {
+  margin-top: 0.75rem;
+}
+
+.interview-markdown ul,
+.interview-markdown ol {
+  padding-left: 1.35rem;
+}
+
+.interview-markdown ul {
+  list-style: disc;
+}
+
+.interview-markdown ol {
+  list-style: decimal;
+}
+
+.interview-markdown code {
+  border-radius: 0.35rem;
+  background: #f1f5f9;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.9em;
+}
+
+.interview-markdown pre {
+  overflow-x: auto;
+  border-radius: 0.75rem;
+  background: #0f172a;
+  padding: 1rem;
+  color: #e2e8f0;
+}
+
+.interview-markdown pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.interview-markdown table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.interview-markdown th,
+.interview-markdown td {
+  border: 1px solid #cbd5e1;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

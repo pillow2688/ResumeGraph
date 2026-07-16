@@ -171,6 +171,33 @@ class InterviewUnavailableResponseError(AppError):
         )
 
 
+class InterviewConversationNotFoundResponseError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=404,
+            code="conversation_not_found",
+            message="The interview conversation is unavailable or expired.",
+        )
+
+
+class InterviewConversationBusyResponseError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=409,
+            code="conversation_busy",
+            message="The interview conversation is processing another request.",
+        )
+
+
+class InterviewRequestConflictResponseError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=409,
+            code="interview_request_conflict",
+            message="The request identifier cannot be reused for this question.",
+        )
+
+
 class InvalidAccessGrantRequestResponseError(AppError):
     def __init__(self) -> None:
         super().__init__(

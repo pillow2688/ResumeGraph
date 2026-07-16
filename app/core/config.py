@@ -153,6 +153,17 @@ class Settings(BaseSettings):
     rag_max_context_characters: int = Field(default=12_000, gt=0, le=100_000)
     rag_answer_timeout_seconds: float = Field(default=45, gt=0, le=120)
     rag_answer_output_retries: int = Field(default=1, ge=0, le=1)
+    agent_supervisor_max_specialist_calls: int = Field(default=4, gt=0, le=4)
+    agent_profile_max_tool_calls: int = Field(default=2, gt=0, le=2)
+    agent_project_max_tool_calls: int = Field(default=2, gt=0, le=2)
+    agent_technical_max_tool_calls: int = Field(default=2, gt=0, le=2)
+    agent_verification_max_runs: int = Field(default=2, gt=0, le=2)
+    agent_max_answer_repairs: int = Field(default=1, ge=0, le=1)
+    agent_max_graph_steps: int = Field(default=12, ge=6, le=50)
+    agent_run_timeout_seconds: float = Field(default=90, gt=0, le=300)
+    conversation_max_turns: int = Field(default=8, gt=0, le=8)
+    conversation_ttl_seconds: int = Field(default=60 * 60, ge=60, le=24 * 60 * 60)
+    conversation_summary_max_characters: int = Field(default=2_000, ge=100, le=10_000)
 
     @model_validator(mode="after")
     def validate_security_settings(self) -> Self:

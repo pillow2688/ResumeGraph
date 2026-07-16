@@ -17,6 +17,7 @@ from app.schemas.knowledge_document import (
     DocumentVersionSummary,
     KnowledgeDocumentDetail,
     KnowledgeDocumentSummary,
+    ProjectKnowledgeStatus,
 )
 
 
@@ -30,6 +31,7 @@ class KnowledgeDocumentRepositoryBackend(Protocol):
         original_filename: str | None,
         raw_content: str,
         content_hash: str,
+        knowledge_status: ProjectKnowledgeStatus = "implemented",
     ) -> KnowledgeDocumentRecord | None: ...
 
     async def list_documents(self, project_id: UUID) -> list[KnowledgeDocumentRecord] | None: ...
@@ -45,6 +47,18 @@ class KnowledgeDocumentRepositoryBackend(Protocol):
     ) -> KnowledgeDocumentRecord: ...
 
     async def list_profile_documents(self) -> list[KnowledgeDocumentRecord]: ...
+
+    async def create_technical_document(
+        self,
+        *,
+        title: str,
+        source_type: str,
+        original_filename: str | None,
+        raw_content: str,
+        content_hash: str,
+    ) -> KnowledgeDocumentRecord: ...
+
+    async def list_technical_documents(self) -> list[KnowledgeDocumentRecord]: ...
 
     async def get_document(self, document_id: UUID) -> KnowledgeDocumentRecord | None: ...
 
@@ -190,6 +204,7 @@ def _to_summary(record: KnowledgeDocumentRecord) -> KnowledgeDocumentSummary:
         id=record.id,
         project_id=record.project_id,
         document_scope=record.document_scope,
+        knowledge_status=record.knowledge_status,
         title=record.title,
         created_at=record.created_at,
         updated_at=record.updated_at,
@@ -239,6 +254,7 @@ class KnowledgeDocumentService:
         *,
         title: str,
         content: str,
+        knowledge_status: ProjectKnowledgeStatus = "implemented",
     ) -> KnowledgeDocumentDetail:
         normalized_title = _normalize_title(title)
         raw_content, content_hash = _validate_text_content(
@@ -247,6 +263,7 @@ class KnowledgeDocumentService:
         )
         return await self._create_document(
             project_id,
+            knowledge_status=knowledge_status,
             title=normalized_title,
             source_type="pasted_markdown",
             original_filename=None,
@@ -261,6 +278,7 @@ class KnowledgeDocumentService:
         title: str,
         filename: str,
         content: bytes,
+        knowledge_status: ProjectKnowledgeStatus = "implemented",
     ) -> KnowledgeDocumentDetail:
         normalized_title = _normalize_title(title)
         safe_filename = _safe_markdown_filename(filename)
@@ -271,6 +289,7 @@ class KnowledgeDocumentService:
         )
         return await self._create_document(
             project_id,
+            knowledge_status=knowledge_status,
             title=normalized_title,
             source_type="markdown_file",
             original_filename=safe_filename,
@@ -335,6 +354,57 @@ class KnowledgeDocumentService:
         try:
             records = await _await_dependency(
                 self._repository.list_profile_documents(),
+                self._dependency_timeout_seconds,
+            )
+        except KnowledgeDocumentRepositoryUnavailableError as error:
+            raise KnowledgeDocumentUnavailableError from error
+        return [_to_summary(record) for record in records]
+
+    async def create_technical_document_from_paste(
+        self,
+        *,
+        title: str,
+        content: str,
+    ) -> KnowledgeDocumentDetail:
+        normalized_title = _normalize_title(title)
+        raw_content, content_hash = _validate_text_content(
+            content,
+            max_bytes=self._markdown_max_bytes,
+        )
+        return await self._create_technical_document(
+            title=normalized_title,
+            source_type="pasted_markdown",
+            original_filename=None,
+            raw_content=raw_content,
+            content_hash=content_hash,
+        )
+
+    async def create_technical_document_from_upload(
+        self,
+        *,
+        title: str,
+        filename: str,
+        content: bytes,
+    ) -> KnowledgeDocumentDetail:
+        normalized_title = _normalize_title(title)
+        safe_filename = _safe_markdown_filename(filename)
+        decoded = _decode_upload(content, max_bytes=self._markdown_max_bytes)
+        raw_content, content_hash = _validate_text_content(
+            decoded,
+            max_bytes=self._markdown_max_bytes,
+        )
+        return await self._create_technical_document(
+            title=normalized_title,
+            source_type="markdown_file",
+            original_filename=safe_filename,
+            raw_content=raw_content,
+            content_hash=content_hash,
+        )
+
+    async def list_technical_documents(self) -> list[KnowledgeDocumentSummary]:
+        try:
+            records = await _await_dependency(
+                self._repository.list_technical_documents(),
                 self._dependency_timeout_seconds,
             )
         except KnowledgeDocumentRepositoryUnavailableError as error:
@@ -431,6 +501,7 @@ class KnowledgeDocumentService:
     async def _create_document(
         self,
         project_id: UUID,
+        knowledge_status: ProjectKnowledgeStatus,
         *,
         title: str,
         source_type: str,
@@ -442,6 +513,7 @@ class KnowledgeDocumentService:
             record = await _await_dependency(
                 self._repository.create_document(
                     project_id=project_id,
+                    knowledge_status=knowledge_status,
                     title=title,
                     source_type=source_type,
                     original_filename=original_filename,
@@ -454,6 +526,30 @@ class KnowledgeDocumentService:
             raise KnowledgeDocumentUnavailableError from error
         if record is None:
             raise ProjectNotFoundError
+        return _to_detail(record)
+
+    async def _create_technical_document(
+        self,
+        *,
+        title: str,
+        source_type: str,
+        original_filename: str | None,
+        raw_content: str,
+        content_hash: str,
+    ) -> KnowledgeDocumentDetail:
+        try:
+            record = await _await_dependency(
+                self._repository.create_technical_document(
+                    title=title,
+                    source_type=source_type,
+                    original_filename=original_filename,
+                    raw_content=raw_content,
+                    content_hash=content_hash,
+                ),
+                self._dependency_timeout_seconds,
+            )
+        except KnowledgeDocumentRepositoryUnavailableError as error:
+            raise KnowledgeDocumentUnavailableError from error
         return _to_detail(record)
 
     async def _create_profile_document(

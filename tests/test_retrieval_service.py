@@ -32,15 +32,18 @@ def make_record(
     document_scope: str = "project",
     project_id: UUID | None = None,
     project_name: str | None = "ResumeGraph",
+    knowledge_status: str | None = None,
 ) -> RetrievalRecord:
     return RetrievalRecord(
         chunk_id=uuid4(),
         content=content,
         content_hash=content_hash,
         document_scope=document_scope,
+        knowledge_status=knowledge_status
+        or ("general_knowledge" if document_scope == "technical" else "implemented"),
         project_id=(
             None
-            if document_scope == "profile"
+            if document_scope in {"profile", "technical"}
             else project_id
             if project_id is not None
             else uuid4()
@@ -132,6 +135,58 @@ def test_retrieve_preserves_profile_scope_without_project_identity() -> None:
     assert evidence[0].document_scope == "profile"
     assert evidence[0].project_id is None
     assert evidence[0].project_name is None
+    assert evidence[0].knowledge_type == "profile_fact"
+    assert evidence[0].knowledge_status == "implemented"
+
+
+def test_specialist_searches_use_strict_scope_and_deterministic_knowledge_type() -> None:
+    profile = make_record(document_scope="profile", project_name=None)
+    project = make_record(knowledge_status="planned")
+    technical = make_record(
+        document_scope="technical",
+        project_name=None,
+        knowledge_status="general_knowledge",
+    )
+    repository = FakeRepository([profile])
+    service = make_service(repository)
+    grant_id, project_id = uuid4(), uuid4()
+
+    profile_evidence = asyncio.run(
+        service.search_profile_knowledge(query="education", grant_id=grant_id)
+    )
+    repository.records = [project]
+    project_evidence = asyncio.run(
+        service.search_project_knowledge(
+            query="future cache",
+            grant_id=grant_id,
+            project_ids=[project_id],
+        )
+    )
+    repository.records = [technical]
+    technical_evidence = asyncio.run(
+        service.search_technical_knowledge(query="cache avalanche", grant_id=grant_id)
+    )
+
+    assert [call["retrieval_scope"] for call in repository.calls] == [
+        "profile",
+        "project",
+        "technical",
+    ]
+    assert repository.calls[0]["project_ids"] == []
+    assert repository.calls[1]["project_ids"] == [project_id]
+    assert repository.calls[2]["project_ids"] == []
+    assert profile_evidence[0].knowledge_type == "profile_fact"
+    assert project_evidence[0].knowledge_type == "planned_solution"
+    assert technical_evidence[0].knowledge_type == "technical_knowledge"
+
+
+def test_phase_3_retrieve_does_not_expand_into_technical_scope() -> None:
+    repository = FakeRepository([])
+    service = make_service(repository)
+
+    asyncio.run(service.retrieve(query="Redis", grant_id=uuid4(), project_ids=[uuid4()]))
+
+    assert repository.calls[0]["retrieval_scope"] == "interview"
 
 
 def test_retrieve_deduplicates_content_hash_then_assigns_stable_handles() -> None:

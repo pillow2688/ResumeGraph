@@ -18,6 +18,10 @@ from app.models import (
     Project,
 )
 
+DocumentScope = Literal["profile", "project", "technical"]
+KnowledgeStatus = Literal["implemented", "planned", "general_knowledge"]
+RetrievalScope = Literal["interview", "profile", "project", "technical", "all"]
+
 
 class DatabaseSessionProvider(Protocol):
     def session(self) -> AbstractAsyncContextManager[AsyncSession]: ...
@@ -28,7 +32,7 @@ class RetrievalRecord:
     chunk_id: UUID
     content: str
     content_hash: str
-    document_scope: Literal["profile", "project"]
+    document_scope: DocumentScope
     project_id: UUID | None
     project_name: str | None
     document_id: UUID
@@ -36,6 +40,7 @@ class RetrievalRecord:
     version_number: int
     heading_path: tuple[str, ...]
     distance: float
+    knowledge_status: KnowledgeStatus = "implemented"
 
 
 class RetrievalRepositoryUnavailableError(Exception):
@@ -50,6 +55,7 @@ def _scope_filters(
     provider_name: str,
     model_name: str,
     dimensions: int,
+    retrieval_scope: RetrievalScope,
 ) -> tuple[object, ...]:
     valid_grant = (
         select(AccessGrant.id)
@@ -60,6 +66,16 @@ def _scope_filters(
         )
         .exists()
     )
+    profile_scope = (
+        (KnowledgeDocument.document_scope == "profile")
+        & KnowledgeDocument.project_id.is_(None)
+        & (KnowledgeDocument.knowledge_status == "implemented")
+    )
+    technical_scope = (
+        (KnowledgeDocument.document_scope == "technical")
+        & KnowledgeDocument.project_id.is_(None)
+        & (KnowledgeDocument.knowledge_status == "general_knowledge")
+    )
     authorized_project = (
         select(GrantProject.project_id)
         .where(
@@ -68,20 +84,26 @@ def _scope_filters(
         )
         .exists()
     )
+    project_scope = (
+        (KnowledgeDocument.document_scope == "project")
+        & KnowledgeDocument.project_id.in_(project_ids)
+        & Project.id.in_(project_ids)
+        & KnowledgeDocument.knowledge_status.in_(("implemented", "planned"))
+        & authorized_project
+    )
+    if retrieval_scope == "profile":
+        selected_scope = profile_scope
+    elif retrieval_scope == "project":
+        selected_scope = project_scope
+    elif retrieval_scope == "technical":
+        selected_scope = technical_scope
+    elif retrieval_scope == "interview":
+        selected_scope = profile_scope | project_scope
+    else:
+        selected_scope = profile_scope | project_scope | technical_scope
     return (
         valid_grant,
-        (
-            (
-                (KnowledgeDocument.document_scope == "profile")
-                & KnowledgeDocument.project_id.is_(None)
-            )
-            | (
-                (KnowledgeDocument.document_scope == "project")
-                & KnowledgeDocument.project_id.in_(project_ids)
-                & Project.id.in_(project_ids)
-                & authorized_project
-            )
-        ),
+        selected_scope,
         KnowledgeDocument.current_published_version_id.is_not(None),
         DocumentVersion.status == "published",
         DocumentChunk.enabled.is_(True),
@@ -125,6 +147,7 @@ class RetrievalRepository:
         model_name: str,
         dimensions: int,
         top_k: int,
+        retrieval_scope: RetrievalScope = "interview",
     ) -> list[RetrievalRecord]:
         self._validate_arguments(
             query_embedding=query_embedding,
@@ -133,6 +156,7 @@ class RetrievalRepository:
             model_name=model_name,
             dimensions=dimensions,
             top_k=top_k,
+            retrieval_scope=retrieval_scope,
         )
         distance = ChunkEmbedding.embedding.cosine_distance(query_embedding)
         ranked = _knowledge_join(
@@ -141,6 +165,7 @@ class RetrievalRepository:
                 DocumentChunk.content.label("content"),
                 DocumentChunk.content_hash.label("content_hash"),
                 KnowledgeDocument.document_scope.label("document_scope"),
+                KnowledgeDocument.knowledge_status.label("knowledge_status"),
                 Project.id.label("project_id"),
                 Project.name.label("project_name"),
                 KnowledgeDocument.id.label("document_id"),
@@ -162,6 +187,7 @@ class RetrievalRepository:
                 provider_name=provider_name,
                 model_name=model_name,
                 dimensions=dimensions,
+                retrieval_scope=retrieval_scope,
             )
         )
         ranked_subquery = ranked.subquery("ranked_evidence")
@@ -171,6 +197,7 @@ class RetrievalRepository:
                 ranked_subquery.c.content,
                 ranked_subquery.c.content_hash,
                 ranked_subquery.c.document_scope,
+                ranked_subquery.c.knowledge_status,
                 ranked_subquery.c.project_id,
                 ranked_subquery.c.project_name,
                 ranked_subquery.c.document_id,
@@ -193,6 +220,7 @@ class RetrievalRepository:
                         content=row["content"],
                         content_hash=row["content_hash"],
                         document_scope=row["document_scope"],
+                        knowledge_status=row["knowledge_status"],
                         project_id=row["project_id"],
                         project_name=row["project_name"],
                         document_id=row["document_id"],
@@ -215,8 +243,9 @@ class RetrievalRepository:
         provider_name: str,
         model_name: str,
         dimensions: int,
+        retrieval_scope: RetrievalScope = "interview",
     ) -> set[UUID]:
-        if not project_ids:
+        if retrieval_scope in {"interview", "project"} and not project_ids:
             raise ValueError("Retrieval project scope cannot be empty.")
         if not chunk_ids:
             return set()
@@ -228,6 +257,7 @@ class RetrievalRepository:
                 provider_name=provider_name,
                 model_name=model_name,
                 dimensions=dimensions,
+                retrieval_scope=retrieval_scope,
             ),
         )
         try:
@@ -246,8 +276,11 @@ class RetrievalRepository:
         model_name: str,
         dimensions: int,
         top_k: int,
+        retrieval_scope: RetrievalScope,
     ) -> None:
-        if not project_ids:
+        if retrieval_scope not in {"interview", "profile", "project", "technical", "all"}:
+            raise ValueError("Retrieval scope is invalid.")
+        if retrieval_scope in {"interview", "project"} and not project_ids:
             raise ValueError("Retrieval project scope cannot be empty.")
         if not provider_name.strip() or not model_name.strip():
             raise ValueError("Retrieval embedding identity cannot be empty.")

@@ -18,13 +18,23 @@ class KnowledgeDocument(Base):
     __tablename__ = "knowledge_documents"
     __table_args__ = (
         CheckConstraint(
-            "document_scope IN ('profile', 'project')",
+            "document_scope IN ('profile', 'project', 'technical')",
             name="ck_knowledge_documents_scope_valid",
         ),
         CheckConstraint(
             "((document_scope = 'project' AND project_id IS NOT NULL) OR "
-            "(document_scope = 'profile' AND project_id IS NULL))",
+            "(document_scope IN ('profile', 'technical') AND project_id IS NULL))",
             name="ck_knowledge_documents_scope_project",
+        ),
+        CheckConstraint(
+            "knowledge_status IN ('implemented', 'planned', 'general_knowledge')",
+            name="ck_knowledge_documents_knowledge_status_valid",
+        ),
+        CheckConstraint(
+            "((document_scope = 'profile' AND knowledge_status = 'implemented') OR "
+            "(document_scope = 'project' AND knowledge_status IN ('implemented', 'planned')) OR "
+            "(document_scope = 'technical' AND knowledge_status = 'general_knowledge'))",
+            name="ck_knowledge_documents_scope_knowledge_status",
         ),
         Index("ix_knowledge_documents_project_id", "project_id"),
         Index(
@@ -48,6 +58,11 @@ class KnowledgeDocument(Base):
         String(20),
         default="project",
         server_default=text("'project'"),
+    )
+    knowledge_status: Mapped[str] = mapped_column(
+        String(24),
+        default="implemented",
+        server_default=text("'implemented'"),
     )
     title: Mapped[str] = mapped_column(String(200))
     current_published_version_id: Mapped[UUID | None] = mapped_column(

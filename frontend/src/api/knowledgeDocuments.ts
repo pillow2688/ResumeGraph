@@ -10,6 +10,8 @@ import type {
   KnowledgeDocument,
   KnowledgeDocumentSummary,
   PublicationState,
+  ProjectKnowledgeStatus,
+  TechnicalDocumentRequest,
   UpdateDocumentChunkRequest,
   UpdateDocumentTitleRequest,
 } from "../types/knowledgeDocument";
@@ -27,6 +29,35 @@ export function listProjectDocuments(
 
 export function listProfileDocuments(): Promise<KnowledgeDocumentSummary[]> {
   return apiRequest<KnowledgeDocumentSummary[]>(`${adminPath}/profile-documents`);
+}
+
+export function listTechnicalDocuments(): Promise<KnowledgeDocumentSummary[]> {
+  return apiRequest<KnowledgeDocumentSummary[]>(
+    `${adminPath}/technical-documents`,
+  );
+}
+
+export function createPastedTechnicalDocument(
+  payload: TechnicalDocumentRequest,
+): Promise<KnowledgeDocument> {
+  return apiRequest<KnowledgeDocument, TechnicalDocumentRequest>(
+    `${adminPath}/technical-documents`,
+    { method: "POST", body: payload },
+  );
+}
+
+export function uploadTechnicalDocument(
+  title: string,
+  file: File,
+): Promise<KnowledgeDocument> {
+  const body = new FormData();
+  body.set("title", title);
+  body.set("knowledge_status", "general_knowledge");
+  body.set("file", file);
+  return apiFormRequest<KnowledgeDocument>(
+    `${adminPath}/technical-documents/upload`,
+    { method: "POST", body },
+  );
 }
 
 export function createPastedProfileDocument(
@@ -65,9 +96,11 @@ export function uploadDocument(
   projectId: string,
   title: string,
   file: File,
+  knowledgeStatus: ProjectKnowledgeStatus = "implemented",
 ): Promise<KnowledgeDocument> {
   const body = new FormData();
   body.set("title", title);
+  body.set("knowledge_status", knowledgeStatus);
   body.set("file", file);
   return apiFormRequest<KnowledgeDocument>(
     `${adminPath}/projects/${projectId}/documents/upload`,

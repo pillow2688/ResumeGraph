@@ -14,7 +14,10 @@ import {
   documentActionLabel,
   documentStatusLabel,
 } from "../components/DocumentWorkflowStatus";
-import type { KnowledgeDocumentSummary } from "../types/knowledgeDocument";
+import type {
+  KnowledgeDocumentSummary,
+  ProjectKnowledgeStatus,
+} from "../types/knowledgeDocument";
 import type { Project } from "../types/project";
 
 function documentErrorMessage(error: unknown): string {
@@ -97,11 +100,20 @@ export function ProjectDocuments() {
     };
   }, [navigate, projectId]);
 
-  async function createFromPaste(title: string, content: string): Promise<void> {
+  async function createFromPaste(
+    title: string,
+    content: string,
+    classification?: string,
+  ): Promise<void> {
+    const knowledgeStatus = classification as ProjectKnowledgeStatus;
     setIsSaving(true);
     setFormError(null);
     try {
-      const created = await createPastedDocument(projectId, { title, content });
+      const created = await createPastedDocument(projectId, {
+        title,
+        content,
+        knowledge_status: knowledgeStatus,
+      });
       setDocuments((current) => [created, ...current]);
       navigate(`/admin/documents/${created.id}`);
     } catch (error) {
@@ -115,11 +127,16 @@ export function ProjectDocuments() {
     }
   }
 
-  async function createFromUpload(title: string, file: File): Promise<void> {
+  async function createFromUpload(
+    title: string,
+    file: File,
+    classification?: string,
+  ): Promise<void> {
+    const knowledgeStatus = classification as ProjectKnowledgeStatus;
     setIsSaving(true);
     setFormError(null);
     try {
-      const created = await uploadDocument(projectId, title, file);
+      const created = await uploadDocument(projectId, title, file, knowledgeStatus);
       setDocuments((current) => [created, ...current]);
       navigate(`/admin/documents/${created.id}`);
     } catch (error) {
@@ -197,9 +214,14 @@ export function ProjectDocuments() {
                       {item.latest_version ? ` · 最新 v${item.latest_version.version_number}` : ""}
                     </p>
                   </div>
-                  <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800">
-                    {documentStatusLabel(item.latest_version?.status)}
-                  </span>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <span className="rounded-full bg-cyan-50 px-2.5 py-1 text-xs font-medium text-cyan-800">
+                      {item.knowledge_status === "planned" ? "后续规划" : "已实现"}
+                    </span>
+                    <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800">
+                      {documentStatusLabel(item.latest_version?.status)}
+                    </span>
+                  </div>
                 </div>
                 <div className="mt-5 flex items-center justify-between gap-3 border-t border-slate-100 pt-4">
                   <div className="text-xs text-slate-500">
@@ -234,6 +256,11 @@ export function ProjectDocuments() {
           onUpload={createFromUpload}
           pasteSubmitLabel="保存文档"
           uploadSubmitLabel="上传并保存"
+          classificationOptions={[
+            { value: "implemented", label: "Project 已实现内容" },
+            { value: "planned", label: "Project 后续规划" },
+          ]}
+          classificationHelp="该身份决定回答能否表述为已经落地；系统不会让模型替你判断。"
         />
       ) : null}
     </Layout>

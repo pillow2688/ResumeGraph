@@ -63,6 +63,7 @@ def test_phase_2_4_metadata_contains_only_the_requested_tables() -> None:
                 "id",
                 "project_id",
                 "document_scope",
+                "knowledge_status",
                 "title",
                 "current_published_version_id",
                 "created_at",
@@ -250,6 +251,10 @@ def test_knowledge_document_and_version_column_contracts() -> None:
     assert documents.c.document_scope.type.length == 20
     assert documents.c.document_scope.nullable is False
     assert documents.c.document_scope.server_default is not None
+    assert isinstance(documents.c.knowledge_status.type, String)
+    assert documents.c.knowledge_status.type.length == 24
+    assert documents.c.knowledge_status.nullable is False
+    assert documents.c.knowledge_status.server_default is not None
     assert isinstance(documents.c.title.type, String)
     assert documents.c.title.type.length == 200
     assert documents.c.title.nullable is False
@@ -275,9 +280,13 @@ def test_knowledge_document_and_version_column_contracts() -> None:
         if isinstance(constraint, CheckConstraint)
     }
     assert document_checks == {
-        "document_scope IN ('profile', 'project')",
+        "document_scope IN ('profile', 'project', 'technical')",
+        "knowledge_status IN ('implemented', 'planned', 'general_knowledge')",
         "((document_scope = 'project' AND project_id IS NOT NULL) OR "
-        "(document_scope = 'profile' AND project_id IS NULL))",
+        "(document_scope IN ('profile', 'technical') AND project_id IS NULL))",
+        "((document_scope = 'profile' AND knowledge_status = 'implemented') OR "
+        "(document_scope = 'project' AND knowledge_status IN ('implemented', 'planned')) OR "
+        "(document_scope = 'technical' AND knowledge_status = 'general_knowledge'))",
     }
 
     assert isinstance(versions.c.id.type, Uuid)
@@ -371,10 +380,21 @@ def test_document_foreign_keys_constraints_and_relationships_support_document_ca
     profile_document = models.KnowledgeDocument(
         project_id=None,
         document_scope="profile",
+        knowledge_status="implemented",
         title="AI Agent resume",
     )
     assert profile_document.project_id is None
     assert profile_document.document_scope == "profile"
+
+    technical_document = models.KnowledgeDocument(
+        project_id=None,
+        document_scope="technical",
+        knowledge_status="general_knowledge",
+        title="Redis principles",
+    )
+    assert technical_document.project_id is None
+    assert technical_document.document_scope == "technical"
+    assert technical_document.knowledge_status == "general_knowledge"
 
 
 def test_phase_2_4_indexing_models_have_exact_constraints_and_relationships() -> None:

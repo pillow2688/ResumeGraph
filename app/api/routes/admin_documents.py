@@ -1,4 +1,4 @@
-from typing import Annotated, cast
+from typing import Annotated, Literal, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, Request, Response, UploadFile, status
@@ -30,6 +30,7 @@ from app.schemas.knowledge_document import (
     KnowledgeDocumentDetail,
     KnowledgeDocumentSummary,
     KnowledgeDocumentUpdateRequest,
+    TechnicalKnowledgeDocumentCreateRequest,
 )
 from app.services.knowledge_document import (
     DocumentNotFoundError,
@@ -184,6 +185,79 @@ async def list_profile_documents(
 
 
 @router.post(
+    "/api/v1/admin/technical-documents",
+    response_model=KnowledgeDocumentDetail,
+    status_code=status.HTTP_201_CREATED,
+    responses=DOCUMENT_ERROR_RESPONSES,
+)
+async def create_pasted_technical_document(
+    payload: TechnicalKnowledgeDocumentCreateRequest,
+    request: Request,
+    _current_admin: Annotated[AdminPrincipal, Depends(get_current_admin)],
+) -> KnowledgeDocumentDetail:
+    try:
+        return await _service(request).create_technical_document_from_paste(
+            title=payload.title,
+            content=payload.content,
+        )
+    except (
+        InvalidDocumentRequestError,
+        MarkdownTooLargeError,
+        InvalidMarkdownEncodingError,
+        InvalidMarkdownContentError,
+        KnowledgeDocumentUnavailableError,
+    ) as error:
+        _raise_service_error(error)
+
+
+@router.post(
+    "/api/v1/admin/technical-documents/upload",
+    response_model=KnowledgeDocumentDetail,
+    status_code=status.HTTP_201_CREATED,
+    responses=DOCUMENT_ERROR_RESPONSES,
+)
+async def create_uploaded_technical_document(
+    request: Request,
+    title: Annotated[str, Form()],
+    knowledge_status: Annotated[Literal["general_knowledge"], Form()],
+    file: Annotated[UploadFile, File()],
+    _current_admin: Annotated[AdminPrincipal, Depends(get_current_admin)],
+) -> KnowledgeDocumentDetail:
+    del knowledge_status
+    content = await _read_upload(request, file)
+    try:
+        return await _service(request).create_technical_document_from_upload(
+            title=title,
+            filename=file.filename or "",
+            content=content,
+        )
+    except (
+        InvalidDocumentRequestError,
+        UnsupportedMarkdownFileError,
+        MarkdownTooLargeError,
+        InvalidMarkdownEncodingError,
+        InvalidMarkdownContentError,
+        KnowledgeDocumentUnavailableError,
+    ) as error:
+        _raise_service_error(error)
+
+
+@router.get(
+    "/api/v1/admin/technical-documents",
+    response_model=list[KnowledgeDocumentSummary],
+    responses=DOCUMENT_ERROR_RESPONSES,
+)
+async def list_technical_documents(
+    request: Request,
+    _current_admin: Annotated[AdminPrincipal, Depends(get_current_admin)],
+) -> list[KnowledgeDocumentSummary]:
+    try:
+        return await _service(request).list_technical_documents()
+    except KnowledgeDocumentUnavailableError as error:
+        _raise_service_error(error)
+
+
+@router.post(
     "/api/v1/admin/projects/{project_id}/documents",
     response_model=KnowledgeDocumentDetail,
     status_code=status.HTTP_201_CREATED,
@@ -203,6 +277,7 @@ async def create_pasted_document(
             project_id,
             title=payload.title,
             content=payload.content,
+            knowledge_status=payload.knowledge_status,
         )
     except (
         InvalidDocumentRequestError,
@@ -230,6 +305,7 @@ async def create_uploaded_document(
     title: Annotated[str, Form()],
     file: Annotated[UploadFile, File()],
     _current_admin: Annotated[AdminPrincipal, Depends(get_current_admin)],
+    knowledge_status: Annotated[Literal["implemented", "planned"], Form()] = "implemented",
 ) -> KnowledgeDocumentDetail:
     content = await _read_upload(request, file)
     try:
@@ -238,6 +314,7 @@ async def create_uploaded_document(
             title=title,
             filename=file.filename or "",
             content=content,
+            knowledge_status=knowledge_status,
         )
     except (
         InvalidDocumentRequestError,

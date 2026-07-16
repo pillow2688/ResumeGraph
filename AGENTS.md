@@ -50,7 +50,12 @@ tested.
   [`docs/PHASE3_SUMMARY.md`](docs/PHASE3_SUMMARY.md). Real 智谱/DeepSeek calls, Docker Desktop,
   the five-service Compose stack, real browser three-question flow, Profile/Project Citations,
   quota, revocation, administrator management, and sanitized browser logs are verified.
-- **Active checkpoint: Phase 3 completed; waiting for user confirmation before Phase 4 planning.**
+- **Phase 4 — Multi-agent interview workflow: completed.** See
+  [`docs/status/PHASE_4_STATUS.md`](docs/status/PHASE_4_STATUS.md) and
+  [`docs/PHASE4_SUMMARY.md`](docs/PHASE4_SUMMARY.md). Technical Knowledge, five bounded Agents,
+  LangGraph orchestration, Redis short-term Conversation, POST SSE, flexible boundary-aware
+  answers, and the desktop/mobile chat UI are implemented and verified.
+- **Active checkpoint: Phase 4 completed; Phase 5 has not started.**
 
 See `docs/PHASE1_SUMMARY.md` for the verified Phase 1 implementation and validation details.
 
@@ -60,26 +65,29 @@ and its complete handoff is in [`docs/PHASE2_SUMMARY.md`](docs/PHASE2_SUMMARY.md
 ## Active phase constraints
 
 - Phase 2.1 through Phase 2.4 and the overall Phase 2 knowledge-base construction are complete.
-- Existing Phase 2 lifecycle work in the dirty tree must be preserved. Phase 3 retrieval now uses
-  published Profile documents globally and published Project documents only inside the current
-  Grant/request project scope.
+- Phase 4 preserves published Profile documents globally, adds globally available published
+  Technical documents, and keeps Project documents strictly inside the current Grant/request
+  project intersection.
 - The approved active Embedding configuration is 智谱 `embedding-3`, 1024 dimensions, batch size
   10, 30-second timeout, and two retries. Secrets are injected only through environment variables.
 - Candidate education, personal summary, skills, awards, research direction, and job direction use
   the implemented Profile document scope. A valid Recruiter Grant implicitly includes published
   Profile evidence; Project evidence remains constrained by `grant_projects` and requested scope.
-- Phase 3 retrieval joins the current published Version, requires enabled Chunks, validates the
+- Phase 4 retrieval joins the current published Version, requires enabled Chunks, validates the
   active Embedding identity and matching `content_hash`, and returns one Evidence item per identical
   content hash in the current result.
-- Phase 3 includes administrator account list/create/safe-delete and visible document workflow
-  states/actions, but does not include an administrator retrieval debugger or evaluation platform.
-- Do not implement later behavior early, including LangGraph, multi-turn context,
-  Conversation/Message persistence, SSE, query rewriting, Reflection, multi-agent behavior,
-  Web Search, hybrid search, or reranking.
-- The Phase 3 status, learning, architecture, and summary documents are the current handoff. Phase 4
-  must preserve the Profile-global plus Grant-scoped Project retrieval invariant.
-- A Phase 3 checkpoint must not automatically Commit, Tag, Merge, or Push; Git integration remains
-  the user's decision.
+- The five Phase 4 Agents keep independent prompts, strict schemas, bounded tool loops, and private
+  tool allowlists. The Supervisor cannot query persistence directly or widen authorization scope.
+- Redis Conversation state is temporary context only. It is bound to the Recruiter Session and
+  Grant, revalidated every turn, invalidated by Grant revocation, and never treated as factual
+  Evidence. No permanent Conversation/Message tables exist.
+- Phase 4 includes public POST SSE progress and a chat-style `/interview` page. Public responses and
+  events never expose prompts, private Agent state, complete Evidence, SQL, or chain of thought.
+- Do not implement Phase 5 behavior early, including evaluation dashboards, Recall@K/MRR/NDCG,
+  Hybrid Search, BM25, RRF, Reranker, HyDE, RAPTOR, CRAG, Self-RAG, or Web Search.
+- The Phase 4 status, learning, architecture, and summary documents are the current handoff.
+- The user authorized the Phase 4 Git checkpoint on `main` and a matching
+  `feature/phase4-multi-agent` branch. This does not authorize Push, Merge, Reset, Clean, or Rebase.
 - Current code, migrations, tests, and the latest subsection status records take precedence over
   obsolete historical plans.
 

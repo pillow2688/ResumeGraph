@@ -36,6 +36,8 @@ const project: Project = {
 const summary: KnowledgeDocumentSummary = {
   id: documentId,
   project_id: projectId,
+  document_scope: "project",
+  knowledge_status: "implemented",
   title: "项目设计说明",
   created_at: "2026-07-15T08:00:00Z",
   updated_at: "2026-07-15T08:00:00Z",
@@ -140,11 +142,13 @@ describe("ProjectDocuments", () => {
     await user.click(screen.getByRole("button", { name: "创建知识文档" }));
     await user.type(screen.getByLabelText("文档标题"), " 项目设计说明 ");
     await user.type(screen.getByLabelText("Markdown 内容"), "# 项目背景");
+    await user.selectOptions(screen.getByLabelText("资料身份"), "planned");
     await user.click(screen.getByRole("button", { name: "保存文档" }));
 
     expect(createPastedMock).toHaveBeenCalledWith(projectId, {
       title: "项目设计说明",
       content: "# 项目背景",
+      knowledge_status: "planned",
     });
     expect(await screen.findByText("文档详情目标")).toBeInTheDocument();
   });
@@ -158,12 +162,18 @@ describe("ProjectDocuments", () => {
     await user.click(screen.getByRole("button", { name: "创建知识文档" }));
     await user.click(screen.getByRole("tab", { name: "上传 .md 文件" }));
     await user.type(screen.getByLabelText("文档标题"), "项目设计说明");
+    await user.selectOptions(screen.getByLabelText("资料身份"), "implemented");
     const file = new File(["# 文件内容"], "design.md", { type: "text/markdown" });
     await user.upload(screen.getByLabelText("选择 Markdown 文件"), file);
 
     expect(screen.getByText(/design\.md/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "上传并保存" }));
-    expect(uploadMock).toHaveBeenCalledWith(projectId, "项目设计说明", file);
+    expect(uploadMock).toHaveBeenCalledWith(
+      projectId,
+      "项目设计说明",
+      file,
+      "implemented",
+    );
     expect(await screen.findByText("文档详情目标")).toBeInTheDocument();
   });
 

@@ -12,6 +12,7 @@ import { ProfileDocuments } from "../pages/ProfileDocuments";
 import { ProjectDocuments } from "../pages/ProjectDocuments";
 import { Projects } from "../pages/Projects";
 import { RecruiterAccess } from "../pages/RecruiterAccess";
+import { TechnicalDocuments } from "../pages/TechnicalDocuments";
 
 export const router = createBrowserRouter([
   {
@@ -29,6 +30,10 @@ export const router = createBrowserRouter([
   {
     path: "/admin/profile-documents",
     element: <ProfileDocuments />,
+  },
+  {
+    path: "/admin/technical-documents",
+    element: <TechnicalDocuments />,
   },
   {
     path: "/admin/users",

@@ -1,23 +1,58 @@
 # ResumeGraph
 
-This repository has completed the **Phase 3 single-turn RAG interview MVP** on top
-of the completed Phase 2 knowledge pipeline. An authorized Recruiter can open `/interview`, select
-Grant-authorized Projects, ask one question, and receive a first-person Evidence-grounded answer
-with validated citations or an explicit insufficient-evidence refusal. PostgreSQL remains the
-durable authorization and knowledge source; pgvector performs retrieval, while Redis holds only
-ephemeral sessions, rate-limit counters, and the ARQ queue.
+This repository has completed the **Phase 4 multi-agent interview workflow** on top of the
+published Profile and Grant-scoped Project RAG baseline. An authorized Recruiter can use the
+chat-style `/interview` page for a bounded multi-turn conversation. A LangGraph Supervisor routes
+questions to Profile, Project, and Technical specialists, then a Verification Agent checks factual
+and authorization boundaries before the response is returned through a normal API or public SSE
+progress stream. PostgreSQL remains the durable authorization and knowledge source; pgvector
+performs retrieval, while Redis stores only ephemeral sessions, conversations, rate-limit counters,
+and the ARQ queue.
 
 The approved Embedding configuration is 智谱 `embedding-3`, 1024 dimensions, batch size 10,
 30-second timeout, and two retries. The API key is intentionally absent from Git and must be
-provided through `EMBEDDING_API_KEY`. On 2026-07-16, real 智谱/DeepSeek calls, the local
-PostgreSQL/pgvector integration, Docker Desktop, and the five-service Compose stack passed external
-acceptance. A real browser run through the containerized Frontend and Backend verified Profile and
-Project publication, all three questions, scoped Citations, quota, immediate revocation, and
-administrator list/create/safe-delete behavior.
+provided through `EMBEDDING_API_KEY`. On 2026-07-16, real 智谱/DeepSeek calls,
+PostgreSQL/pgvector, Redis Conversation, LangGraph, Docker Desktop, POST SSE, and the five-service
+Compose stack passed acceptance. A real desktop and mobile browser run verified Profile, Project,
+Technical, and planned Evidence boundaries, public Agent progress, scoped Citations, quota, and
+immediate Conversation invalidation after Grant revocation.
 
-See the [Phase 3 plan](docs/PHASE3_PLAN.md), [Phase 3 summary](docs/PHASE3_SUMMARY.md), and
-[Phase 3 status](docs/status/PHASE_3_STATUS.md). Advanced retrieval, LangGraph, multi-agent behavior,
-and multi-turn conversation require separate future approval.
+See the [Phase 4 plan](docs/PHASE4_PLAN.md), [Phase 4 summary](docs/PHASE4_SUMMARY.md),
+[Phase 4 status](docs/status/PHASE_4_STATUS.md),
+[learning notes](docs/learning/PHASE_4_LEARNING.md), and
+[architecture](docs/architecture/PHASE_4_ARCHITECTURE.md). Phase 5 evaluation and advanced
+retrieval are not started.
+
+## Phase 4 multi-agent interview workflow
+
+Phase 4 adds administrator-published Technical knowledge and explicitly separates four Evidence
+identities: Profile facts, implemented Project facts, planned Project solutions, and general
+Technical knowledge. Technical material explains principles but cannot prove that a mechanism was
+implemented in a Project; planned material is presented only as a future option.
+
+The bounded LangGraph workflow contains five Agents with independent prompts, strict Pydantic
+inputs and outputs, private tool allowlists, and code-enforced budgets:
+
+```text
+Interview Supervisor
+├─ Profile Agent      → published Profile knowledge
+├─ Project RAG Agent  → currently authorized Project knowledge
+├─ Technical Agent    → published general Technical knowledge
+└─ Verification Agent → citation, publication, Grant, and semantic-boundary checks
+```
+
+The Phase 3 compatibility route remains available at `POST /api/v1/interview/ask`. Phase 4 adds:
+
+- `POST /api/v1/interview/conversations`
+- `POST /api/v1/interview/conversations/{conversation_id}/ask`
+- `POST /api/v1/interview/conversations/{conversation_id}/ask/stream`
+- `DELETE /api/v1/interview/conversations/{conversation_id}`
+
+Conversation history is short-lived Redis context used only for reference resolution. Every turn
+revalidates the Recruiter Session, Grant, current Project scope, published Evidence, and citation
+handles. Historical answers never become factual Evidence. The React page provides right-aligned
+interviewer messages, left-aligned Markdown answers, public Agent progress, expandable citations,
+desktop/mobile drawers, interruption handling, and no localStorage chat persistence.
 
 ## Phase 3 RAG MVP
 
@@ -491,7 +526,7 @@ uv run alembic downgrade base
 uv run alembic upgrade head
 ```
 
-## Current Phase 2 limitations
+## Current limitations
 
 The final Phase 2 lifecycle patch adds `document_scope=profile|project`, Profile document creation
 and listing, exact-hash deduplication in current-published Profile or single-Project scopes,
@@ -526,11 +561,12 @@ The non-billable real PostgreSQL/pgvector publication boundary can be run with
 The live boundary was executed successfully on 2026-07-15 with secrets loaded from the ignored
 local `.env`; no API key is stored in this repository.
 
-Phase 3 now adds globally published Profile plus Grant-authorized Project pgvector retrieval and a
-bounded single-turn Chat path. There is still no LangGraph, multi-agent runtime, multi-turn context,
-SSE, Query Rewrite, Hybrid Search, Reranker, PDF, Word, OCR, or object storage. A graceful Worker
-cancellation records `failed`, but a process hard-kill cannot run cleanup and may leave a stale
-`processing` record; there is no lease sweeper or outbox framework. JWT, OAuth, refresh tokens,
-recruiter accounts, and email invitations also remain outside the current scope. Administrator,
-Recruiter UI, and API deployment should remain same-origin; broad CORS is intentionally not
-configured.
+Phase 4 now adds the bounded LangGraph multi-agent runtime, Technical knowledge, Redis-backed
+short-term context, POST SSE, and a chat-style interview UI. It deliberately does not add permanent
+chat history, Web Search, Query Rewrite beyond the Project Agent's single bounded retry, Hybrid
+Search, BM25, RRF, Reranker, Recall@K/MRR/NDCG evaluation, PDF, Word, OCR, or object storage. A
+graceful Worker cancellation records `failed`, but a process hard-kill cannot run cleanup and may
+leave a stale `processing` record; there is no lease sweeper or outbox framework. JWT, OAuth,
+refresh tokens, recruiter accounts, and email invitations also remain outside the current scope.
+Administrator, Recruiter UI, and API deployment should remain same-origin; broad CORS is
+intentionally not configured.

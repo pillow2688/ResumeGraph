@@ -1,5 +1,7 @@
 import { useState, type ChangeEvent, type FormEvent } from "react";
 
+import type { KnowledgeStatus } from "../types/knowledgeDocument";
+
 export const MARKDOWN_MAX_BYTES = 1024 * 1024;
 
 type InputMode = "paste" | "upload";
@@ -10,10 +12,23 @@ interface MarkdownInputDialogProps {
   heading: string;
   includeTitle: boolean;
   onCancel: () => void;
-  onPaste: (title: string, content: string) => Promise<void>;
-  onUpload: (title: string, file: File) => Promise<void>;
+  onPaste: (
+    title: string,
+    content: string,
+    classification?: KnowledgeStatus,
+  ) => Promise<void>;
+  onUpload: (
+    title: string,
+    file: File,
+    classification?: KnowledgeStatus,
+  ) => Promise<void>;
   pasteSubmitLabel: string;
   uploadSubmitLabel: string;
+  classificationOptions?: Array<{
+    value: KnowledgeStatus;
+    label: string;
+  }>;
+  classificationHelp?: string;
 }
 
 function markdownFileError(file: File): string | null {
@@ -39,12 +54,15 @@ export function MarkdownInputDialog({
   onUpload,
   pasteSubmitLabel,
   uploadSubmitLabel,
+  classificationOptions = [],
+  classificationHelp,
 }: MarkdownInputDialogProps) {
   const [mode, setMode] = useState<InputMode>("paste");
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [classification, setClassification] = useState<KnowledgeStatus | "">("");
   const byteLength = new TextEncoder().encode(content).byteLength;
 
   function selectMode(nextMode: InputMode): void {
@@ -66,6 +84,10 @@ export function MarkdownInputDialog({
       setLocalError("请输入文档标题。");
       return;
     }
+    if (classificationOptions.length > 0 && !classification) {
+      setLocalError("请选择资料身份。");
+      return;
+    }
 
     if (mode === "paste") {
       if (!content.trim()) {
@@ -76,7 +98,7 @@ export function MarkdownInputDialog({
         setLocalError("Markdown 内容不能超过 1 MiB。");
         return;
       }
-      await onPaste(normalizedTitle, content);
+      await onPaste(normalizedTitle, content, classification || undefined);
       return;
     }
 
@@ -89,7 +111,7 @@ export function MarkdownInputDialog({
       setLocalError(selectedFileError);
       return;
     }
-    await onUpload(normalizedTitle, file);
+    await onUpload(normalizedTitle, file, classification || undefined);
   }
 
   return (
@@ -150,6 +172,37 @@ export function MarkdownInputDialog({
               required
               value={title}
             />
+          </label>
+        ) : null}
+
+        {classificationOptions.length > 0 ? (
+          <label
+            className="mt-5 block text-sm font-medium text-slate-800"
+            htmlFor="knowledge-classification"
+          >
+            资料身份
+            <select
+              aria-label="资料身份"
+              className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none focus:border-cyan-700 focus:ring-4 focus:ring-cyan-100"
+              id="knowledge-classification"
+              onChange={(event) =>
+                setClassification(event.target.value as KnowledgeStatus | "")
+              }
+              required
+              value={classification}
+            >
+              <option value="">请选择资料身份</option>
+              {classificationOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            {classificationHelp ? (
+              <span className="mt-2 block text-xs leading-5 text-slate-500">
+                {classificationHelp}
+              </span>
+            ) : null}
           </label>
         ) : null}
 

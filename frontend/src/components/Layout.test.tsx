@@ -50,6 +50,10 @@ describe("Layout", () => {
       "href",
       "/admin/access-grants",
     );
+    expect(screen.getByRole("link", { name: "Technical 资料" })).toHaveAttribute(
+      "href",
+      "/admin/technical-documents",
+    );
     await user.click(screen.getByRole("button", { name: "退出登录" }));
 
     expect(logoutAdminMock).toHaveBeenCalledOnce();

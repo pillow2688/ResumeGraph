@@ -13,11 +13,27 @@ end
 return current
 """
 
+_COMPARE_AND_DELETE_SCRIPT = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+    return redis.call('DEL', KEYS[1])
+end
+return 0
+"""
+
 
 class RedisOperations(Protocol):
     async def get(self, key: str) -> str | None: ...
 
     async def set_with_ttl(self, key: str, value: str, ttl_seconds: int) -> None: ...
+
+    async def set_if_absent_with_ttl(
+        self,
+        key: str,
+        value: str,
+        ttl_seconds: int,
+    ) -> bool: ...
+
+    async def compare_and_delete(self, key: str, expected_value: str) -> bool: ...
 
     async def delete(self, key: str) -> None: ...
 
@@ -54,6 +70,30 @@ class RedisConnection:
             await self._client.set(key, value, ex=ttl_seconds)
         except (RedisError, OSError) as error:
             raise DependencyUnavailableError("redis") from error
+
+    async def set_if_absent_with_ttl(
+        self,
+        key: str,
+        value: str,
+        ttl_seconds: int,
+    ) -> bool:
+        try:
+            result = await self._client.set(key, value, ex=ttl_seconds, nx=True)
+        except (RedisError, OSError) as error:
+            raise DependencyUnavailableError("redis") from error
+        return bool(result)
+
+    async def compare_and_delete(self, key: str, expected_value: str) -> bool:
+        try:
+            result = await self._client.eval(
+                _COMPARE_AND_DELETE_SCRIPT,
+                1,
+                key,
+                expected_value,
+            )
+        except (RedisError, OSError) as error:
+            raise DependencyUnavailableError("redis") from error
+        return bool(result)
 
     async def delete(self, key: str) -> None:
         try:

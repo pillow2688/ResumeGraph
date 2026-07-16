@@ -129,3 +129,30 @@ export async function apiFormRequest<TResponse>(
 
   return parseResponse<TResponse>(response);
 }
+
+export async function apiStreamRequest<TBody>(
+  path: string,
+  body: TBody,
+  signal?: AbortSignal,
+): Promise<Response> {
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}${path}`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+    throw new ApiError(0, "network_error", "无法连接服务，请检查网络后重试。");
+  }
+
+  if (!response.ok) {
+    await parseResponse<never>(response);
+  }
+  return response;
+}

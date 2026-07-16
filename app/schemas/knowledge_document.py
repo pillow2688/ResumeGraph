@@ -9,7 +9,9 @@ DocumentTitle = Annotated[
     StringConstraints(strip_whitespace=True, min_length=1, max_length=200),
 ]
 DocumentSourceType = Literal["pasted_markdown", "markdown_file"]
-DocumentScope = Literal["profile", "project"]
+DocumentScope = Literal["profile", "project", "technical"]
+KnowledgeStatus = Literal["implemented", "planned", "general_knowledge"]
+ProjectKnowledgeStatus = Literal["implemented", "planned"]
 DocumentStatus = Literal[
     "draft",
     "processing",
@@ -25,6 +27,13 @@ DocumentStatus = Literal[
 class KnowledgeDocumentCreateRequest(BaseModel):
     title: DocumentTitle
     content: str
+    knowledge_status: KnowledgeStatus = "implemented"
+
+
+class TechnicalKnowledgeDocumentCreateRequest(BaseModel):
+    title: DocumentTitle
+    content: str
+    knowledge_status: Literal["general_knowledge"]
 
 
 class KnowledgeDocumentUpdateRequest(BaseModel):
@@ -79,6 +88,7 @@ class KnowledgeDocumentSummary(BaseModel):
     id: UUID
     project_id: UUID | None
     document_scope: DocumentScope = "project"
+    knowledge_status: KnowledgeStatus = "implemented"
     title: str
     created_at: datetime
     updated_at: datetime
